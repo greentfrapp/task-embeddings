@@ -62,7 +62,7 @@ class FewShotTask2():
 		self.rand_test_y = np.random.RandomState(2)
 
 	def next(self):
-		chosen_classes = np.random.choice(np.arange(10), size=3, replace=False)
+		chosen_classes = np.random.choice(np.arange(10), size=5, replace=False)
 		train_x = []
 		train_y = []
 		test_x = []
