@@ -154,7 +154,7 @@ def main(unused_args):
 			"test_labels": test_labels, # batch_size, num_classes * update_batch_size, num_classes
 		}
 
-		model = CNN("model", layers=4, input_tensors=input_tensors)
+		model = CNN2("model", layers=4, input_tensors=input_tensors)
 
 		sess = tf.InteractiveSession()
 		model.load(sess, FLAGS.savepath, verbose=True)
