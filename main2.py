@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 from absl import flags
 from absl import app
 
-from models import CNN, FFN
+from models import CNN, CNN2, FFN
 from data_generator import DataGenerator
 
 
@@ -87,11 +87,11 @@ def main(unused_args):
 		# Graphs for metatraining and metavalidation
 		# using scope reuse=tf.AUTO_REUSE, not sure if this is the best way to do it
 
-		model_metatrain = CNN("model", layers=4, input_tensors=metatrain_input_tensors)
+		model_metatrain = CNN2("model", layers=4, input_tensors=metatrain_input_tensors)
 		# WIP adaResNet
 		# model_metatrain = adaResNetModel("model", n=num_classes, input_tensors=input_tensors, logdir=FLAGS.logdir + "train")
 
-		model_metaval = CNN("model", layers=4, input_tensors=metaval_input_tensors)
+		model_metaval = CNN2("model", layers=4, input_tensors=metaval_input_tensors)
 		# WIP adaResNet
 		# model_metaval = adaResNetModel("model", n=num_classes, input_tensors=input_tensors, logdir=FLAGS.logdir + "val", is_training=model_metatrain.is_training)
 
@@ -209,8 +209,9 @@ def main(unused_args):
 					model.train_labels: train_labels,
 					model.test_inputs: test_inputs,
 					model.test_labels: test_labels,
-					# model.amp: amp, # use amplitude to scale loss
+					model.amp: amp, # use amplitude to scale loss
 				}
+				
 				metatrain_postloss, _ = sess.run([model.loss, model.optimize], feed_dict)
 				if step > 0 and step % FLAGS.print_every == 0:
 					# model.writer.add_summary(metatrain_summary, step)

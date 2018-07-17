@@ -16,69 +16,95 @@ import numpy as np
 
 class Net(object):
 
-	def __init__(self, inputs, layers=2):
+	def __init__(self, inputs, layers=3):
 		with tf.variable_scope("net", reuse=tf.AUTO_REUSE):
 			running_output = inputs
 			for i in np.arange(layers):
-				running_output = tf.layers.dense(
+				conv = tf.layers.conv2d(
 					inputs=running_output,
-					units=40,
-					activation=tf.nn.relu,
-					name="dense_{}".format(i)
+					filters=64,
+					kernel_size=(3, 3),
+					strides=(1, 1),
+					padding="same",
+					# activation=tf.nn.relu,
+					activation=None,
+					name="conv_{}".format(i),
+					reuse=tf.AUTO_REUSE,
 				)
+				norm = tf.contrib.layers.batch_norm(
+					inputs=conv,
+					activation_fn=tf.nn.relu,
+					reuse=tf.AUTO_REUSE,
+					scope="model/net",
+				)
+				maxpool = tf.layers.max_pooling2d(
+					inputs=norm,
+					pool_size=(2, 2),
+					strides=(2, 2),
+					padding="valid",
+				)
+				running_output = maxpool
 			self.output = running_output
 
 
-class FFN(object):
+class CNN2(object):
 
-	def __init__(self, name, layers=2, num_train_samples=10, num_test_samples=10):
-		super(FFN, self).__init__()
+	def __init__(self, name, layers=3, input_tensors=None):
+		super(CNN2, self).__init__()
 		self.name = name
 		self.hidden = 64
+		self.n_way = 5
 		with tf.variable_scope(self.name, reuse=tf.AUTO_REUSE):
-			self.build_model(layers, num_train_samples, num_test_samples)
+			self.build_model(layers, input_tensors)
 			variables = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, self.name)
 			self.saver = tf.train.Saver(var_list=variables, max_to_keep=3)
 
-	def build_model(self, layers=2, num_train_samples=10, num_test_samples=10):
+	def build_model(self, layers=3, input_tensors=None):
 
-		self.train_inputs = tf.placeholder(
-			shape=(None, num_train_samples, 1),
-			dtype=tf.float32,
-			name="train_inputs",
-		)
-		self.train_labels = tf.placeholder(
-			shape=(None, num_train_samples, 1),
-			dtype=tf.float32,
-			name="train_labels",
-		)
-		self.test_inputs = tf.placeholder(
-			shape=(None, num_test_samples, 1),
-			dtype=tf.float32,
-			name="test_inputs"
-		)
-		self.test_labels = tf.placeholder(
-			shape=(None, num_test_samples, 1),
-			dtype=tf.float32,
-			name="test_labels",
-		)
-		# use amplitude to scale loss
-		self.amp = tf.placeholder(
-			shape=(None),
-			dtype=tf.float32,
-			name="amplitude"
-		)
+		if input_tensors is None:
+			self.train_inputs = tf.placeholder(
+				shape=(None, 28, 28, 1),
+				dtype=tf.float32,
+				name="train_inputs",
+			)
+			self.train_labels = tf.placeholder(
+				shape=(None, num_classes),
+				dtype=tf.float32,
+				name="train_labels",
+			)
+			self.test_inputs = tf.placeholder(
+				shape=(None, 28, 28, 1),
+				dtype=tf.float32,
+				name="test_inputs"
+			)
+			self.test_labels = tf.placeholder(
+				shape=(None, num_classes),
+				dtype=tf.float32,
+				name="test_labels",
+			)
 
-		batchsize = tf.shape(self.train_inputs)[0]
+		else:
+			num_classes = self.n_way
+			self.train_inputs = tf.reshape(input_tensors['train_inputs'], [-1, 28, 28, 1])
+			self.test_inputs = tf.reshape(input_tensors['test_inputs'], [-1, 28, 28, 1])
+			if tf.shape(input_tensors['train_labels'])[-1] != self.n_way:
+				self.train_labels = tf.reshape(tf.one_hot(tf.argmax(input_tensors['train_labels'], axis=2), depth=num_classes), [-1, num_classes])
+				self.test_labels = tf.reshape(tf.one_hot(tf.argmax(input_tensors['test_labels'], axis=2), depth=num_classes), [-1, num_classes])
+			else:
+				self.train_labels = tf.reshape(input_tensors['train_labels'], [-1, num_classes])
+				self.test_labels = tf.reshape(input_tensors['test_labels'], [-1, num_classes])
+
+		batchsize = tf.shape(input_tensors['train_inputs'])[0]
 
 		# Calculate class vectors
 		#	Embed training samples
-		# (64, 10, 40)
 		self.net = net = Net(self.train_inputs, layers)
+		# (64, 5, 20000)
+		# train_running_output = tf.reshape(net.output, [batchsize, -1, (28 - layers) * (28 - layers) * 64])
+		train_running_output = tf.reshape(net.output, [batchsize, -1, 64])
 		# (64, 5, 128)
 		train_embed = tf.layers.dense(
-			inputs=tf.concat([net.output, self.train_labels], axis=-1),
-			# inputs=net.output,
+			inputs=train_running_output,
 			units=self.hidden,
 			activation=None,
 			name="train_embed",
@@ -106,28 +132,39 @@ class FFN(object):
 
 		net2 = Net(self.test_inputs, layers)
 		# running_output = tf.reshape(net2.output, [batchsize, -1, (28 - layers) * (28 - layers) * 64])
-		# (64, 10, 40)
-		self.running_output = net2.output
+		running_output = tf.reshape(net2.output, [batchsize, -1, 64])
+
+		self.running_output = running_output #/ tf.norm(running_output, axis=-1, keep_dims=True)
 
 		output_weights = tf.layers.dense(
 			inputs=train_embed,
 			# units=(28 - layers) * (28 - layers) * 64,
-			units=40,
+			units=64,
 			activation=None,
 		)
-		# (64, 1, 40)
-		self.output_weights = tf.reduce_mean(output_weights, axis=1, keep_dims=True)
+		# (64, 5, 5).T * (64, 5, 20000)
+		self.train_labels = tf.reshape(self.train_labels, [batchsize, -1, self.n_way])
+		output_weights = tf.matmul(self.train_labels, output_weights, transpose_a=True)
+		self.output_weights = output_weights #/ tf.norm(output_weights, axis=-1, keep_dims=True)
 		
-		self.output = tf.matmul(self.running_output, self.output_weights, transpose_b=True)
-		self.unrolled_output = tf.reshape(self.output, [-1])
-		self.predictions = self.unrolled_output
-		
-		amp = tf.reshape(self.amp, [-1, 1, 1])
+		# self.scale = tf.Variable(
+		# 	initial_value=10.,
+		# 	name="scale",
+		# 	# shape=(1),
+		# 	dtype=tf.float32,
+		# )
 
-		self.loss = tf.losses.mean_squared_error(labels=tf.reshape(self.test_labels / amp, [-1]), predictions=tf.reshape(self.output / amp, [-1]))
+		# (64, 5, 20000) * (64, 5, 20000).T
+		self.output = tf.matmul(self.running_output, self.output_weights, transpose_b=True)
+		self.output = tf.reshape(self.output, [-1, 5])
+
+		self.logits = self.output
 		
+		self.loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=self.test_labels, logits=self.logits))
 		self.optimize = tf.train.AdamOptimizer(learning_rate=3e-4).minimize(self.loss)
 
+		self.test_accuracy = tf.contrib.metrics.accuracy(labels=tf.argmax(self.test_labels, axis=1), predictions=tf.argmax(self.logits, axis=1))
+		
 	def attention(self, query, key, value):
 		dotp = tf.matmul(query, key, transpose_b=True) / (tf.cast(tf.shape(query)[-1], tf.float32) ** 0.5)
 		attention_weights = tf.nn.softmax(dotp)
