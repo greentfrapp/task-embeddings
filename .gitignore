@@ -1,3 +1,9 @@
+data/*/*
+!data/miniImagenet/*.py
+!data/miniImagenet/*.csv
+!data/omniglot_resized/*.py
+saved_models/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
