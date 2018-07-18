@@ -47,10 +47,10 @@ class Net(object):
 			self.output = running_output
 
 
-class CNN2(object):
+class CNN_MiniImagenet(object):
 
 	def __init__(self, name, n_way=5, layers=3, input_tensors=None):
-		super(CNN2, self).__init__()
+		super(CNN_MiniImagenet, self).__init__()
 		self.name = name
 		self.hidden = 128
 		self.n_way = n_way
@@ -85,8 +85,8 @@ class CNN2(object):
 
 		else:
 			num_classes = self.n_way
-			self.train_inputs = tf.reshape(input_tensors['train_inputs'], [-1, 28, 28, 1])
-			self.test_inputs = tf.reshape(input_tensors['test_inputs'], [-1, 28, 28, 1])
+			self.train_inputs = tf.reshape(input_tensors['train_inputs'], [-1, 84, 84, 3])
+			self.test_inputs = tf.reshape(input_tensors['test_inputs'], [-1, 84, 84, 3])
 			if tf.shape(input_tensors['train_labels'])[-1] != self.n_way:
 				self.train_labels = tf.reshape(tf.one_hot(tf.argmax(input_tensors['train_labels'], axis=2), depth=num_classes), [-1, num_classes])
 				self.test_labels = tf.reshape(tf.one_hot(tf.argmax(input_tensors['test_labels'], axis=2), depth=num_classes), [-1, num_classes])
@@ -101,7 +101,7 @@ class CNN2(object):
 		self.net = net = Net(self.train_inputs, layers)
 		# (64, 5, 20000)
 		# train_running_output = tf.reshape(net.output, [batchsize, -1, (28 - layers) * (28 - layers) * 64])
-		train_running_output = tf.reshape(net.output, [batchsize, -1, 64])
+		train_running_output = tf.reshape(net.output, [batchsize, -1, 25 * 64])
 		# (64, 5, 128)
 		train_embed = tf.layers.dense(
 			inputs=train_running_output,
@@ -132,14 +132,14 @@ class CNN2(object):
 
 		net2 = Net(self.test_inputs, layers)
 		# running_output = tf.reshape(net2.output, [batchsize, -1, (28 - layers) * (28 - layers) * 64])
-		running_output = tf.reshape(net2.output, [batchsize, -1, 64])
+		running_output = tf.reshape(net2.output, [batchsize, -1, 25 * 64])
 
 		self.running_output = running_output #/ tf.norm(running_output, axis=-1, keep_dims=True)
 
 		output_weights = tf.layers.dense(
 			inputs=train_embed,
 			# units=(28 - layers) * (28 - layers) * 64,
-			units=64,
+			units=25 * 64,
 			activation=None,
 		)
 		# ((64, 5, 5).T * (64, 5, 20000)) -> (64, 5, 20000) / (64, 5, 1)

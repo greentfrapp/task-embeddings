@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 from absl import flags
 from absl import app
 
-from models import CNN, CNN2, FFN
+from models import CNN, CNN2, CNN_MiniImagenet, FFN
 from data_generator import DataGenerator
 
 
@@ -43,13 +43,13 @@ flags.DEFINE_integer("print_every", 100, "Frequency for printing training loss a
 
 def main(unused_args):
 
-	if FLAGS.train and FLAGS.datasource == "omniglot":
+	if FLAGS.train and FLAGS.datasource in ["omniglot", "miniimagenet"]:
 
 		num_shot_train = FLAGS.num_shot_train or 1
 		num_shot_test = FLAGS.num_shot_test or 1
 
 		data_generator = DataGenerator(
-			datasource="omniglot",
+			datasource=FLAGS.datasource,
 			num_classes=FLAGS.num_classes,
 			num_samples_per_class=num_shot_train+num_shot_test,
 			batch_size=FLAGS.meta_batch_size,
@@ -87,11 +87,17 @@ def main(unused_args):
 		# Graphs for metatraining and metavalidation
 		# using scope reuse=tf.AUTO_REUSE, not sure if this is the best way to do it
 
-		model_metatrain = CNN2("model", n_way=FLAGS.num_classes, layers=4, input_tensors=metatrain_input_tensors)
+		if FLAGS.datasource == "miniimagenet":
+			model_metatrain = CNN_MiniImagenet("model", n_way=FLAGS.num_classes, layers=4, input_tensors=metatrain_input_tensors)
+		else:
+			model_metatrain = CNN2("model", n_way=FLAGS.num_classes, layers=4, input_tensors=metatrain_input_tensors)
 		# WIP adaResNet
 		# model_metatrain = adaResNetModel("model", n=num_classes, input_tensors=input_tensors, logdir=FLAGS.logdir + "train")
 
-		model_metaval = CNN2("model", n_way=FLAGS.num_classes, layers=4, input_tensors=metaval_input_tensors)
+		if FLAGS.datasource == "miniimagenet":
+			model_metaval = CNN_MiniImagenet("model", n_way=FLAGS.num_classes, layers=4, input_tensors=metaval_input_tensors)
+		else:
+			model_metaval = CNN2("model", n_way=FLAGS.num_classes, layers=4, input_tensors=metaval_input_tensors)
 		# WIP adaResNet
 		# model_metaval = adaResNetModel("model", n=num_classes, input_tensors=input_tensors, logdir=FLAGS.logdir + "val", is_training=model_metatrain.is_training)
 
@@ -124,7 +130,7 @@ def main(unused_args):
 			else:
 				print("Latest model not saved.")
 
-	if FLAGS.test and FLAGS.datasource == "omniglot":
+	if FLAGS.test and FLAGS.datasource in ["omniglot", "miniimagenet"]:
 
 		NUM_TEST_SAMPLES = 600
 
@@ -134,7 +140,7 @@ def main(unused_args):
 		num_shot_test = FLAGS.num_shot_test or 1
 
 		data_generator = DataGenerator(
-			datasource="omniglot",
+			datasource=FLAGS.datasource,
 			num_classes=num_test_classes,
 			num_samples_per_class=num_shot_train+num_shot_test,
 			batch_size=1, # use 1 for testing to calculate stdev and ci95
@@ -154,7 +160,10 @@ def main(unused_args):
 			"test_labels": test_labels, # batch_size, num_classes * update_batch_size, num_classes
 		}
 
-		model = CNN2("model", n_way=FLAGS.num_classes, layers=4, input_tensors=input_tensors)
+		if FLAGS.datasource == "miniimagenet":
+			model = CNN2("model", n_way=FLAGS.num_classes, layers=4, input_tensors=input_tensors)
+		else:
+			model = CNN2("model", n_way=FLAGS.num_classes, layers=4, input_tensors=input_tensors)
 
 		sess = tf.InteractiveSession()
 		model.load(sess, FLAGS.savepath, verbose=True)
@@ -173,9 +182,9 @@ def main(unused_args):
 		ci95 = 1.96 * stdev / np.sqrt(NUM_TEST_SAMPLES)
 
 		print("\nEnd of Test!")
-		print("Accuracy                : {:.3f}".format(avg))
-		print("StdDev                  : {:.3f}".format(stdev))
-		print("95% Confidence Interval : {:.3f}".format(ci95))
+		print("Accuracy                : {:.4f}".format(avg))
+		print("StdDev                  : {:.4f}".format(stdev))
+		print("95% Confidence Interval : {:.4f}".format(ci95))
 
 	if FLAGS.train and FLAGS.datasource == "sinusoid":
 
@@ -196,7 +205,7 @@ def main(unused_args):
 		tf.global_variables_initializer().run()
 
 		saved_loss = np.inf
-		metatrain_iterations = FLAGS.metatrain_iterations or 20000
+		metatrain_iterations = FLAGS.metatrain_iterations or 50000
 		try:
 			for step in np.arange(metatrain_iterations):
 				batch_x, batch_y, amp, phase = data_generator.generate()
@@ -216,7 +225,7 @@ def main(unused_args):
 				if step > 0 and step % FLAGS.print_every == 0:
 					# model.writer.add_summary(metatrain_summary, step)
 					print("Step #{} - PreLoss : {:.3f} - PostLoss : {:.3f}".format(step, 0., metatrain_postloss))
-				if step > 0 and (step % FLAGS.validate_every == 0 or step == (metatrain_iterations - 1)):
+				# if step > 0 and (step % FLAGS.validate_every == 0 or step == (metatrain_iterations - 1)):
 					if step == (metatrain_iterations - 1):
 						print("Training complete!")
 					if metatrain_postloss < saved_loss:
