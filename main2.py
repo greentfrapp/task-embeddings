@@ -161,7 +161,7 @@ def main(unused_args):
 		}
 
 		if FLAGS.datasource == "miniimagenet":
-			model = CNN2("model", n_way=FLAGS.num_classes, layers=4, input_tensors=input_tensors)
+			model = CNN_MiniImagenet("model", n_way=FLAGS.num_classes, layers=4, input_tensors=input_tensors)
 		else:
 			model = CNN2("model", n_way=FLAGS.num_classes, layers=4, input_tensors=input_tensors)
 

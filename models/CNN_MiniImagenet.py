@@ -52,7 +52,7 @@ class CNN_MiniImagenet(object):
 	def __init__(self, name, n_way=5, layers=3, input_tensors=None):
 		super(CNN_MiniImagenet, self).__init__()
 		self.name = name
-		self.hidden = 128
+		self.hidden = 512
 		self.n_way = n_way
 		with tf.variable_scope(self.name, reuse=tf.AUTO_REUSE):
 			self.build_model(layers, input_tensors)
