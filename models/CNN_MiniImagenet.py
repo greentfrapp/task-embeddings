@@ -22,7 +22,7 @@ class Net(object):
 			for i in np.arange(layers):
 				conv = tf.layers.conv2d(
 					inputs=running_output,
-					filters=64,
+					filters=32,
 					kernel_size=(3, 3),
 					strides=(1, 1),
 					padding="same",
@@ -52,7 +52,7 @@ class CNN_MiniImagenet(object):
 	def __init__(self, name, n_way=5, layers=3, input_tensors=None):
 		super(CNN_MiniImagenet, self).__init__()
 		self.name = name
-		self.hidden = 512
+		self.hidden = 1024
 		self.n_way = n_way
 		with tf.variable_scope(self.name, reuse=tf.AUTO_REUSE):
 			self.build_model(layers, input_tensors)
@@ -101,7 +101,7 @@ class CNN_MiniImagenet(object):
 		self.net = net = Net(self.train_inputs, layers)
 		# (64, 5, 20000)
 		# train_running_output = tf.reshape(net.output, [batchsize, -1, (28 - layers) * (28 - layers) * 64])
-		train_running_output = tf.reshape(net.output, [batchsize, -1, 25 * 64])
+		train_running_output = tf.reshape(net.output, [batchsize, -1, 25 * 32])
 		# (64, 5, 128)
 		train_embed = tf.layers.dense(
 			inputs=train_running_output,
@@ -132,14 +132,14 @@ class CNN_MiniImagenet(object):
 
 		net2 = Net(self.test_inputs, layers)
 		# running_output = tf.reshape(net2.output, [batchsize, -1, (28 - layers) * (28 - layers) * 64])
-		running_output = tf.reshape(net2.output, [batchsize, -1, 25 * 64])
+		running_output = tf.reshape(net2.output, [batchsize, -1, 25 * 32])
 
 		self.running_output = running_output #/ tf.norm(running_output, axis=-1, keep_dims=True)
 
 		output_weights = tf.layers.dense(
 			inputs=train_embed,
 			# units=(28 - layers) * (28 - layers) * 64,
-			units=25 * 64,
+			units=25 * 32,
 			activation=None,
 		)
 		# ((64, 5, 5).T * (64, 5, 20000)) -> (64, 5, 20000) / (64, 5, 1)
