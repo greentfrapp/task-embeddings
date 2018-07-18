@@ -87,11 +87,11 @@ def main(unused_args):
 		# Graphs for metatraining and metavalidation
 		# using scope reuse=tf.AUTO_REUSE, not sure if this is the best way to do it
 
-		model_metatrain = CNN2("model", layers=4, input_tensors=metatrain_input_tensors)
+		model_metatrain = CNN2("model", n_way=FLAGS.num_classes, layers=4, input_tensors=metatrain_input_tensors)
 		# WIP adaResNet
 		# model_metatrain = adaResNetModel("model", n=num_classes, input_tensors=input_tensors, logdir=FLAGS.logdir + "train")
 
-		model_metaval = CNN2("model", layers=4, input_tensors=metaval_input_tensors)
+		model_metaval = CNN2("model", n_way=FLAGS.num_classes, layers=4, input_tensors=metaval_input_tensors)
 		# WIP adaResNet
 		# model_metaval = adaResNetModel("model", n=num_classes, input_tensors=input_tensors, logdir=FLAGS.logdir + "val", is_training=model_metatrain.is_training)
 
@@ -154,7 +154,7 @@ def main(unused_args):
 			"test_labels": test_labels, # batch_size, num_classes * update_batch_size, num_classes
 		}
 
-		model = CNN2("model", layers=4, input_tensors=input_tensors)
+		model = CNN2("model", n_way=FLAGS.num_classes, layers=4, input_tensors=input_tensors)
 
 		sess = tf.InteractiveSession()
 		model.load(sess, FLAGS.savepath, verbose=True)

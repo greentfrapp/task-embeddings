@@ -49,11 +49,11 @@ class Net(object):
 
 class CNN2(object):
 
-	def __init__(self, name, layers=3, input_tensors=None):
+	def __init__(self, name, n_way=5, layers=3, input_tensors=None):
 		super(CNN2, self).__init__()
 		self.name = name
 		self.hidden = 64
-		self.n_way = 5
+		self.n_way = n_way
 		with tf.variable_scope(self.name, reuse=tf.AUTO_REUSE):
 			self.build_model(layers, input_tensors)
 			variables = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, self.name)
@@ -156,7 +156,7 @@ class CNN2(object):
 
 		# (64, 5, 20000) * (64, 5, 20000).T
 		self.output = tf.matmul(self.running_output, self.output_weights, transpose_b=True)
-		self.output = tf.reshape(self.output, [-1, 5])
+		self.output = tf.reshape(self.output, [-1, self.n_way])
 
 		self.logits = self.output
 		
