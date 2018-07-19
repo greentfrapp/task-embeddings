@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 from absl import flags
 from absl import app
 
-from models import CNN, CNN2, CNN_MiniImagenet, FFN
+from models import CNN, CNN2, CNN_MiniImagenet, FFN, ResNet
 from data_generator import DataGenerator
 
 
@@ -109,14 +109,15 @@ def main(unused_args):
 		metatrain_iterations = FLAGS.metatrain_iterations or 40000
 		try:
 			for step in np.arange(metatrain_iterations):
-				metatrain_loss, metatrain_postaccuracy, _ = sess.run([model_metatrain.loss, model_metatrain.test_accuracy, model_metatrain.optimize])
+				_ = sess.run(model_metatrain.ae_optimize)
+				metatrain_loss, metatrain_postaccuracy, _ = sess.run([model_metatrain.loss, model_metatrain.test_accuracy, model_metatrain.optimize], {model_metatrain.is_training: True})
 				if step > 0 and step % FLAGS.print_every == 0:
 					# model_metatrain.writer.add_summary(metatrain_summary, step)
 					print("Step #{} - Loss : {:.3f} - PreAcc : {:.3f} - PostAcc : {:.3f}".format(step, metatrain_loss, 0, metatrain_postaccuracy))
 				if step > 0 and (step % FLAGS.validate_every == 0 or step == (metatrain_iterations - 1)):
 					if step == (metatrain_iterations - 1):
 						print("Training complete!")
-					metaval_loss, metaval_postaccuracy = sess.run([model_metaval.loss, model_metaval.test_accuracy])
+					metaval_loss, metaval_postaccuracy = sess.run([model_metaval.loss, model_metaval.test_accuracy], {model_metaval.is_training: False})
 					# model_metaval.writer.add_summary(metaval_summary, step)
 					print("Validation Results - Loss : {:.3f} - PreAcc : {:.3f} - PostAcc : {:.3f}".format(metaval_loss, 0, metaval_postaccuracy))
 					if metaval_loss < saved_metaval_loss:
@@ -166,13 +167,14 @@ def main(unused_args):
 			model = CNN2("model", n_way=FLAGS.num_classes, layers=4, input_tensors=input_tensors)
 
 		sess = tf.InteractiveSession()
+		tf.global_variables_initializer().run()
 		model.load(sess, FLAGS.savepath, verbose=True)
 		tf.train.start_queue_runners()
 
 		accuracy_list = []
 
 		for task in np.arange(NUM_TEST_SAMPLES):
-			accuracy = sess.run(model.test_accuracy)
+			accuracy = sess.run(model.test_accuracy, {model.is_training: False})
 			accuracy_list.append(accuracy)
 			if task > 0 and task % 100 == 0:
 				print("Metatested on {} tasks...".format(task))

@@ -5,6 +5,7 @@ Utility functions
 import os
 import random
 import tensorflow as tf
+import numpy as np
 
 
 def update_target_graph(from_scope,to_scope):

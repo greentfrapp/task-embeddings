@@ -16,7 +16,8 @@ import numpy as np
 
 class Net(object):
 
-	def __init__(self, inputs, layers=3):
+	def __init__(self, inputs, layers=3, is_training=None):
+		self.is_training = is_training
 		with tf.variable_scope("net", reuse=tf.AUTO_REUSE):
 			running_output = inputs
 			for i in np.arange(layers):
@@ -26,8 +27,8 @@ class Net(object):
 					kernel_size=(3, 3),
 					strides=(1, 1),
 					padding="same",
-					# activation=tf.nn.relu,
-					activation=None,
+					activation=tf.nn.relu,
+					# activation=None,
 					name="conv_{}".format(i),
 					reuse=tf.AUTO_REUSE,
 				)
@@ -36,6 +37,7 @@ class Net(object):
 					activation_fn=tf.nn.relu,
 					reuse=tf.AUTO_REUSE,
 					scope="model/net",
+					# is_training=self.is_training,
 				)
 				maxpool = tf.layers.max_pooling2d(
 					inputs=norm,
@@ -46,6 +48,36 @@ class Net(object):
 				running_output = maxpool
 			self.output = running_output
 
+class Decoder(object):
+
+	def __init__(self, inputs):
+		with tf.variable_scope("decoder", reuse=tf.AUTO_REUSE):
+			output = tf.reshape(inputs, [-1, 5 * 5 * 32])
+			output = tf.layers.dense(
+				inputs=output,
+				units=2000,
+				activation=tf.nn.relu,
+				name="decoder_1",
+			)
+			output = tf.layers.dense(
+				inputs=output,
+				units=5000,
+				activation=tf.nn.relu,
+				name="decoder_2",
+			)
+			output = tf.layers.dense(
+				inputs=output,
+				units=10000,
+				activation=tf.nn.relu,
+				name="decoder_3",
+			)
+			output = tf.layers.dense(
+				inputs=output,
+				units=84 * 84 * 3,
+				activation=tf.sigmoid,
+				name="decoder_output",
+			)
+			self.output = tf.reshape(output, [-1, 84, 84, 3])
 
 class CNN_MiniImagenet(object):
 
@@ -94,14 +126,24 @@ class CNN_MiniImagenet(object):
 				self.train_labels = tf.reshape(input_tensors['train_labels'], [-1, num_classes])
 				self.test_labels = tf.reshape(input_tensors['test_labels'], [-1, num_classes])
 
+		self.is_training = tf.placeholder(
+			shape=(None),
+			dtype=tf.bool,
+			name="training_flag",
+		)
+
 		batchsize = tf.shape(input_tensors['train_inputs'])[0]
 
 		# Calculate class vectors
 		#	Embed training samples
-		self.net = net = Net(self.train_inputs, layers)
+		self.net = net = Net(self.train_inputs, layers, self.is_training)
+		self.decoder = Decoder(self.net.output)
+		self.ae_loss = tf.losses.mean_squared_error(labels=self.train_inputs, predictions=self.decoder.output)
+		self.ae_optimize = tf.train.AdamOptimizer(learning_rate=1e-3).minimize(self.ae_loss)
+
 		# (64, 5, 20000)
 		# train_running_output = tf.reshape(net.output, [batchsize, -1, (28 - layers) * (28 - layers) * 64])
-		train_running_output = tf.reshape(net.output, [batchsize, -1, 25 * 32])
+		train_running_output = tf.reshape(net.output, [batchsize, -1, 5 * 5 * 32])
 		# (64, 5, 128)
 		train_embed = tf.layers.dense(
 			inputs=train_running_output,
@@ -130,16 +172,16 @@ class CNN_MiniImagenet(object):
 			)
 			train_embed = tf.contrib.layers.layer_norm(train_embed, begin_norm_axis=2)
 
-		net2 = Net(self.test_inputs, layers)
+		net2 = Net(self.test_inputs, layers, self.is_training)
 		# running_output = tf.reshape(net2.output, [batchsize, -1, (28 - layers) * (28 - layers) * 64])
-		running_output = tf.reshape(net2.output, [batchsize, -1, 25 * 32])
+		running_output = tf.reshape(net2.output, [batchsize, -1, 5 * 5 * 32])
 
 		self.running_output = running_output #/ tf.norm(running_output, axis=-1, keep_dims=True)
 
 		output_weights = tf.layers.dense(
 			inputs=train_embed,
 			# units=(28 - layers) * (28 - layers) * 64,
-			units=25 * 32,
+			units=5 * 5 * 32,
 			activation=None,
 		)
 		# ((64, 5, 5).T * (64, 5, 20000)) -> (64, 5, 20000) / (64, 5, 1)
@@ -149,7 +191,7 @@ class CNN_MiniImagenet(object):
 		self.output_weights = output_weights #/ tf.norm(output_weights, axis=-1, keep_dims=True)
 		
 		# self.scale = tf.Variable(
-		# 	initial_value=10.,
+		# 	initial_value=1.,
 		# 	name="scale",
 		# 	# shape=(1),
 		# 	dtype=tf.float32,
@@ -157,11 +199,13 @@ class CNN_MiniImagenet(object):
 
 		# (64, 5, 20000) * (64, 5, 20000).T
 		self.output = tf.matmul(self.running_output, self.output_weights, transpose_b=True)
+		# self.output = self.output * self.scale
 		self.output = tf.reshape(self.output, [-1, self.n_way])
 
 		self.logits = self.output
 		
 		self.loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=self.test_labels, logits=self.logits))
+		self.loss = self.loss
 		self.optimize = tf.train.AdamOptimizer(learning_rate=3e-4).minimize(self.loss)
 
 		self.test_accuracy = tf.contrib.metrics.accuracy(labels=tf.argmax(self.test_labels, axis=1), predictions=tf.argmax(self.logits, axis=1))
