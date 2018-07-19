@@ -110,7 +110,7 @@ class CNN_MiniImagenet(object):
 			name="train_embed",
 		)
 		
-		for i in np.arange(3):
+		for i in np.arange(5):
 			train_embed, _ = self.attention(
 				query=train_embed,
 				key=train_embed,
