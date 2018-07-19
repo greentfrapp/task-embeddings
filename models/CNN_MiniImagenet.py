@@ -139,14 +139,14 @@ class CNN_MiniImagenet(object):
 		self.net = net = Net(self.train_inputs, layers, self.is_training)
 		self.decoder = Decoder(self.net.output)
 		self.ae_loss = tf.losses.mean_squared_error(labels=self.train_inputs, predictions=self.decoder.output)
-		self.ae_optimize = tf.train.AdamOptimizer(learning_rate=1e-3).minimize(self.ae_loss)
+		self.ae_optimize = tf.train.AdamOptimizer(learning_rate=3e-3).minimize(self.ae_loss)
 
 		# (64, 5, 20000)
 		# train_running_output = tf.reshape(net.output, [batchsize, -1, (28 - layers) * (28 - layers) * 64])
 		train_running_output = tf.reshape(net.output, [batchsize, -1, 5 * 5 * 32])
 		# (64, 5, 128)
 		train_embed = tf.layers.dense(
-			inputs=train_running_output,
+			inputs=tf.concat([train_running_output, tf.reshape(self.train_labels, [batchsize, -1, self.n_way])], axis=-1),
 			units=self.hidden,
 			activation=None,
 			name="train_embed",
@@ -191,7 +191,7 @@ class CNN_MiniImagenet(object):
 		self.output_weights = output_weights #/ tf.norm(output_weights, axis=-1, keep_dims=True)
 		
 		# self.scale = tf.Variable(
-		# 	initial_value=1.,
+		# 	initial_value=100.,
 		# 	name="scale",
 		# 	# shape=(1),
 		# 	dtype=tf.float32,
