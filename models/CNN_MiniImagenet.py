@@ -117,14 +117,52 @@ class CNN_MiniImagenet(object):
 
 		else:
 			num_classes = self.n_way
-			self.train_inputs = tf.reshape(input_tensors['train_inputs'], [-1, 84, 84, 3])
-			self.test_inputs = tf.reshape(input_tensors['test_inputs'], [-1, 84, 84, 3])
-			if tf.shape(input_tensors['train_labels'])[-1] != self.n_way:
-				self.train_labels = tf.reshape(tf.one_hot(tf.argmax(input_tensors['train_labels'], axis=2), depth=num_classes), [-1, num_classes])
-				self.test_labels = tf.reshape(tf.one_hot(tf.argmax(input_tensors['test_labels'], axis=2), depth=num_classes), [-1, num_classes])
+			if 'train_inputs' not in input_tensors:
+				self.train_inputs = tf.placeholder(
+					shape=(None, 84, 84, 3),
+					dtype=tf.float32,
+					name="train_inputs",
+				)
+				self.train_labels = tf.placeholder(
+					shape=(None, num_classes),
+					dtype=tf.float32,
+					name="train_labels",
+				)
+				self.test_inputs = tf.placeholder(
+					shape=(None, 84, 84, 3),
+					dtype=tf.float32,
+					name="test_inputs",
+				)
+				self.test_labels = tf.placeholder(
+					shape=(None, num_classes),
+					dtype=tf.float32,
+					name="test_labels",
+				)
+				self.reg_inputs = tf.reshape(input_tensors['test_inputs'], [-1, 84, 84, 3])
+				if tf.shape(input_tensors['test_labels'])[-1] != self.n_way:
+					self.reg_labels = tf.reshape(tf.one_hot(tf.argmax(input_tensors['test_labels'], axis=2), depth=num_classes), [-1, num_classes])
+				else:
+					self.reg_labels = tf.reshape(input_tensors['test_labels'], [-1, num_classes])
 			else:
-				self.train_labels = tf.reshape(input_tensors['train_labels'], [-1, num_classes])
-				self.test_labels = tf.reshape(input_tensors['test_labels'], [-1, num_classes])
+				self.reg_inputs = tf.placeholder(
+					shape=(None, 84, 84, 3),
+					dtype=tf.float32,
+					name="train_inputs",
+				)
+				self.reg_labels = tf.placeholder(
+					shape=(None, num_classes),
+					dtype=tf.float32,
+					name="train_labels",
+				)
+				
+				self.train_inputs = tf.reshape(input_tensors['train_inputs'], [-1, 84, 84, 3])
+				self.test_inputs = tf.reshape(input_tensors['test_inputs'], [-1, 84, 84, 3])
+				if tf.shape(input_tensors['train_labels'])[-1] != self.n_way:
+					self.train_labels = tf.reshape(tf.one_hot(tf.argmax(input_tensors['train_labels'], axis=2), depth=num_classes), [-1, num_classes])
+					self.test_labels = tf.reshape(tf.one_hot(tf.argmax(input_tensors['test_labels'], axis=2), depth=num_classes), [-1, num_classes])
+				else:
+					self.train_labels = tf.reshape(input_tensors['train_labels'], [-1, num_classes])
+					self.test_labels = tf.reshape(input_tensors['test_labels'], [-1, num_classes])
 
 		self.is_training = tf.placeholder(
 			shape=(None),
@@ -132,83 +170,109 @@ class CNN_MiniImagenet(object):
 			name="training_flag",
 		)
 
-		batchsize = tf.shape(input_tensors['train_inputs'])[0]
+		batchsize = tf.shape(input_tensors['test_inputs'])[0]
 
 		# Calculate class vectors
 		#	Embed training samples
 		self.net = net = Net(self.train_inputs, layers, self.is_training)
-		self.decoder = Decoder(self.net.output)
-		self.ae_loss = tf.losses.mean_squared_error(labels=self.train_inputs, predictions=self.decoder.output)
-		self.ae_optimize = tf.train.AdamOptimizer(learning_rate=3e-3).minimize(self.ae_loss)
+		# self.decoder = Decoder(self.net.output)
+		# self.ae_loss = tf.losses.mean_squared_error(labels=self.train_inputs, predictions=self.decoder.output)
+		# self.ae_optimize = tf.train.AdamOptimizer(learning_rate=3e-3).minimize(self.ae_loss)
 
 		# (64, 5, 20000)
 		# train_running_output = tf.reshape(net.output, [batchsize, -1, (28 - layers) * (28 - layers) * 64])
 		train_running_output = tf.reshape(net.output, [batchsize, -1, 5 * 5 * 32])
 		# (64, 5, 128)
-		train_embed = tf.layers.dense(
-			inputs=tf.concat([train_running_output, tf.reshape(self.train_labels, [batchsize, -1, self.n_way])], axis=-1),
-			units=self.hidden,
-			activation=None,
-			name="train_embed",
-		)
-		
-		for i in np.arange(5):
-			train_embed, _ = self.attention(
-				query=train_embed,
-				key=train_embed,
-				value=train_embed,
-			)
-			dense = tf.layers.dense(
-				inputs=train_embed,
-				units=self.hidden * 2,
-				activation=tf.nn.relu,
-				name="encoder_layer{}_dense1".format(i + 1)
-			)
-			train_embed += tf.layers.dense(
-				inputs=dense,
+		with tf.variable_scope("attention"):
+			train_embed = tf.layers.dense(
+				inputs=train_running_output,
 				units=self.hidden,
 				activation=None,
-				name="encoder_layer{}_dense2".format(i + 1)
+				name="train_embed",
 			)
-			train_embed = tf.contrib.layers.layer_norm(train_embed, begin_norm_axis=2)
+			
+			for i in np.arange(5):
+				train_embed, _ = self.attention(
+					query=train_embed,
+					key=train_embed,
+					value=train_embed,
+				)
+				dense = tf.layers.dense(
+					inputs=train_embed,
+					units=self.hidden * 2,
+					activation=tf.nn.relu,
+					name="encoder_layer{}_dense1".format(i + 1)
+				)
+				train_embed += tf.layers.dense(
+					inputs=dense,
+					units=self.hidden,
+					activation=None,
+					name="encoder_layer{}_dense2".format(i + 1)
+				)
+				train_embed = tf.contrib.layers.layer_norm(train_embed, begin_norm_axis=2)
+
+			output_weights = tf.layers.dense(
+				inputs=train_embed,
+				# units=(28 - layers) * (28 - layers) * 64,
+				units=5 * 5 * 32,
+				activation=None,
+			)
+		# output_weights = train_running_output
 
 		net2 = Net(self.test_inputs, layers, self.is_training)
 		# running_output = tf.reshape(net2.output, [batchsize, -1, (28 - layers) * (28 - layers) * 64])
 		running_output = tf.reshape(net2.output, [batchsize, -1, 5 * 5 * 32])
 
-		self.running_output = running_output #/ tf.norm(running_output, axis=-1, keep_dims=True)
+		self.running_output = running_output / tf.norm(running_output, axis=-1, keep_dims=True)
 
-		output_weights = tf.layers.dense(
-			inputs=train_embed,
-			# units=(28 - layers) * (28 - layers) * 64,
-			units=5 * 5 * 32,
-			activation=None,
-		)
+		net3 = Net(self.reg_inputs, layers, self.is_training)
+		reg_output = tf.reshape(net3.output, [batchsize, -1, 5 * 5 * 32])
+		self.reg_output = reg_output / tf.norm(reg_output, axis=-1, keep_dims=True)
+
+		
 		# ((64, 5, 5).T * (64, 5, 20000)) -> (64, 5, 20000) / (64, 5, 1)
 		train_labels = tf.reshape(self.train_labels, [batchsize, -1, self.n_way])
 		# output_weights = tf.matmul(train_labels, output_weights, transpose_a=True)
+		output_weights = output_weights / tf.norm(output_weights, axis=-1, keep_dims=True)
 		output_weights = tf.matmul(train_labels, output_weights, transpose_a=True) / tf.expand_dims(tf.reduce_sum(train_labels, axis=1), axis=-1)
-		self.output_weights = output_weights #/ tf.norm(output_weights, axis=-1, keep_dims=True)
+
+		reg_weights = tf.get_variable(
+			name="weights_64",
+			shape=(64, 5 * 5 * 32),
+			dtype=tf.float32,
+			trainable=True,
+		)
+
+		self.reg_weights = reg_weights / tf.norm(reg_weights, axis=-1, keep_dims=True)
+
+		self.output_weights = output_weights / tf.norm(output_weights, axis=-1, keep_dims=True)
 		
-		# self.scale = tf.Variable(
-		# 	initial_value=100.,
-		# 	name="scale",
-		# 	# shape=(1),
-		# 	dtype=tf.float32,
-		# )
+		self.scale = tf.get_variable(
+			name="scale",
+			shape=(1),
+			initializer=tf.ones_initializer,
+			dtype=tf.float32,
+		)
 
 		# (64, 5, 20000) * (64, 5, 20000).T
 		self.output = tf.matmul(self.running_output, self.output_weights, transpose_b=True)
-		# self.output = self.output * self.scale
+		self.output = self.output * self.scale
 		self.output = tf.reshape(self.output, [-1, self.n_way])
 
 		self.logits = self.output
 		
 		self.loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=self.test_labels, logits=self.logits))
 		self.loss = self.loss
-		self.optimize = tf.train.AdamOptimizer(learning_rate=3e-4).minimize(self.loss)
+		variables = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, self.name + "/attention")
+		self.optimize = tf.train.AdamOptimizer(learning_rate=3e-4).minimize(self.loss, var_list=variables)
 
 		self.test_accuracy = tf.contrib.metrics.accuracy(labels=tf.argmax(self.test_labels, axis=1), predictions=tf.argmax(self.logits, axis=1))
+
+		self.reg_output = tf.matmul(tf.reshape(self.reg_output, [-1, 5 * 5 * 32]), self.reg_weights, transpose_b=True)
+		self.reg_output = self.reg_output * self.scale
+		self.reg_output = tf.reshape(self.reg_output, [-1, self.n_way])
+		self.reg_loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=self.reg_labels, logits=self.reg_output))
+		self.reg_optimize = tf.train.AdamOptimizer(learning_rate=1e-3).minimize(self.reg_loss)
 		
 	def attention(self, query, key, value):
 		dotp = tf.matmul(query, key, transpose_b=True) / (tf.cast(tf.shape(query)[-1], tf.float32) ** 0.5)

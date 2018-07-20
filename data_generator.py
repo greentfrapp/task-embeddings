@@ -6,6 +6,7 @@ import numpy as np
 import os
 import random
 import tensorflow as tf
+import pickle
 
 from utils import get_images
 
@@ -79,6 +80,28 @@ class DataGenerator(object):
             self.metatrain_character_folders = metatrain_folders
             self.metaval_character_folders = metaval_folders
             self.rotations = config.get('rotations', [0])
+        elif self.datasource == 'cifar':
+            self.num_classes = config.get('num_classes', self.num_classes)
+            self.img_size = config.get('img_size', (32, 32))
+            self.dim_input = np.prod(self.img_size)*3
+            self.dim_output = self.num_classes
+            metatrain_folder = config.get('metatrain_folder', './data/cifar/train')
+            if self.test_set:
+                metaval_folder = config.get('metaval_folder', './data/cifar/test')
+            else:
+                metaval_folder = config.get('metaval_folder', './data/cifar/val')
+
+            metatrain_folders = [os.path.join(metatrain_folder, label) \
+                for label in os.listdir(metatrain_folder) \
+                if os.path.isdir(os.path.join(metatrain_folder, label)) \
+                ]
+            metaval_folders = [os.path.join(metaval_folder, label) \
+                for label in os.listdir(metaval_folder) \
+                if os.path.isdir(os.path.join(metaval_folder, label)) \
+                ]
+            self.metatrain_character_folders = metatrain_folders
+            self.metaval_character_folders = metaval_folders
+            self.rotations = config.get('rotations', [0])
         else:
             raise ValueError('Unrecognized data source')
 
@@ -90,27 +113,60 @@ class DataGenerator(object):
             num_total_batches = 200000
             # !!
             # temporarily reduce num_total_batches
-            num_total_batches = 20000
+            # num_total_batches = 20000
+            # num_total_batches = 2000
         else:
             folders = self.metaval_character_folders
             num_total_batches = 600
 
         # make list of files
         print('Generating filenames')
-        all_filenames = []
-        from datetime import datetime
-        start = datetime.now()
-        for i in range(num_total_batches):
-            if (i + 1) % 5000 == 0:
-                print('Generated {} tasks...'.format((i + 1)))
-            sampled_character_folders = random.sample(folders, self.num_classes)
-            random.shuffle(sampled_character_folders)
-            labels_and_images = get_images(sampled_character_folders, range(self.num_classes), nb_samples=self.num_samples_per_class, shuffle=False)
-            # make sure the above isn't randomized order
-            labels = [li[0] for li in labels_and_images]
-            filenames = [li[1] for li in labels_and_images]
-            all_filenames.extend(filenames)
-            
+        if self.datasource == 'cifar':
+            if not train:
+                all_filenames = []
+                from datetime import datetime
+                start = datetime.now()
+                for i in range(num_total_batches):
+                    if (i + 1) % 5000 == 0:
+                        print('Generated {} tasks...'.format((i + 1)))
+                    sampled_character_folders = random.sample(folders, self.num_classes)
+                    random.shuffle(sampled_character_folders)
+
+                    # temp
+                    # sampled_character_folders = folders
+
+                    labels_and_images = get_images(sampled_character_folders, range(self.num_classes), nb_samples=self.num_samples_per_class, shuffle=False)
+                    # make sure the above isn't randomized order
+                    labels = [li[0] for li in labels_and_images]
+                    filenames = [li[1] for li in labels_and_images]
+                    all_filenames.extend(filenames)
+
+            # temp
+            # save and reload pickle for fast iteration
+            else:
+                with open("cifar_filenames_5way1shot.pkl", 'rb') as file:
+                    # pickle.dump(all_filenames, file)
+                    all_filenames = pickle.load(file)
+                labels = list(np.concatenate(np.array(self.num_samples_per_class * [list(range(self.num_classes))]).T, axis=0))
+        else:
+            all_filenames = []
+            from datetime import datetime
+            start = datetime.now()
+            for i in range(num_total_batches):
+                if (i + 1) % 5000 == 0:
+                    print('Generated {} tasks...'.format((i + 1)))
+                sampled_character_folders = random.sample(folders, self.num_classes)
+                random.shuffle(sampled_character_folders)
+
+                # temp
+                # sampled_character_folders = folders
+
+                labels_and_images = get_images(sampled_character_folders, range(self.num_classes), nb_samples=self.num_samples_per_class, shuffle=False)
+                # make sure the above isn't randomized order
+                labels = [li[0] for li in labels_and_images]
+                filenames = [li[1] for li in labels_and_images]
+                all_filenames.extend(filenames)
+
         # make queue for tensorflow to read from
         filename_queue = tf.train.string_input_producer(tf.convert_to_tensor(all_filenames), shuffle=False)
         print('Generating image processing ops')
@@ -118,6 +174,11 @@ class DataGenerator(object):
         _, image_file = image_reader.read(filename_queue)
         if self.datasource == 'miniimagenet':
             image = tf.image.decode_jpeg(image_file, channels=3)
+            image.set_shape((self.img_size[0],self.img_size[1],3))
+            image = tf.reshape(image, [self.dim_input])
+            image = tf.cast(image, tf.float32) / 255.0
+        elif self.datasource == 'cifar':
+            image = tf.image.decode_png(image_file, channels=3)
             image.set_shape((self.img_size[0],self.img_size[1],3))
             image = tf.reshape(image, [self.dim_input])
             image = tf.cast(image, tf.float32) / 255.0

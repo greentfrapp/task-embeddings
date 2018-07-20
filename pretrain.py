@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 from absl import flags
 from absl import app
 
-from models import CNN, CNN2, CNN_MiniImagenet, FFN, ResNet, CNN_cifar
+from models import CNN, CNN2, CNN_MiniImagenet, FFN, ResNet
 from data_generator import DataGenerator
 
 
@@ -19,7 +19,6 @@ FLAGS = flags.FLAGS
 # Commands
 flags.DEFINE_bool("train", False, "Train")
 flags.DEFINE_bool("test", False, "Test")
-flags.DEFINE_bool("load", False, "Resume training from a saved model")
 
 # Task parameters
 flags.DEFINE_string("datasource", "omniglot", "omniglot or sinusoid (miniimagenet WIP)")
@@ -44,10 +43,10 @@ flags.DEFINE_integer("print_every", 100, "Frequency for printing training loss a
 
 def main(unused_args):
 
-	if FLAGS.train and FLAGS.datasource in ["omniglot", "miniimagenet", "cifar"]:
+	if FLAGS.train and FLAGS.datasource in ["omniglot", "miniimagenet"]:
 
-		num_shot_train = FLAGS.num_shot_train or 1
-		num_shot_test = FLAGS.num_shot_test or 1
+		num_shot_train = FLAGS.num_shot_train or 0
+		num_shot_test = FLAGS.num_shot_test or 64
 
 		data_generator = DataGenerator(
 			datasource=FLAGS.datasource,
@@ -61,79 +60,68 @@ def main(unused_args):
 		# metatrain_image_tensor - (batch_size, num_classes * num_samples_per_class, 28 * 28)
 		# metatrain_label_tensor - (batch_size, num_classes * num_samples_per_class, num_classes)
 		metatrain_image_tensor, metatrain_label_tensor = data_generator.make_data_tensor(train=True)
-		train_inputs = tf.slice(metatrain_image_tensor, [0, 0, 0], [-1, FLAGS.num_classes*num_shot_train, -1])
-		test_inputs = tf.slice(metatrain_image_tensor, [0, FLAGS.num_classes*num_shot_train, 0], [-1, -1, -1])
-		train_labels = tf.slice(metatrain_label_tensor, [0, 0, 0], [-1, FLAGS.num_classes*num_shot_train, -1])
-		test_labels = tf.slice(metatrain_label_tensor, [0, FLAGS.num_classes*num_shot_train, 0], [-1, -1, -1])
+		# train_inputs = tf.slice(metatrain_image_tensor, [0, 0, 0], [-1, FLAGS.num_classes*num_shot_train, -1])
+		# test_inputs = tf.slice(metatrain_image_tensor, [0, FLAGS.num_classes*num_shot_train, 0], [-1, -1, -1])
+		# train_labels = tf.slice(metatrain_label_tensor, [0, 0, 0], [-1, FLAGS.num_classes*num_shot_train, -1])
+		# test_labels = tf.slice(metatrain_label_tensor, [0, FLAGS.num_classes*num_shot_train, 0], [-1, -1, -1])
 		metatrain_input_tensors = {
-			"train_inputs": train_inputs, # batch_size, num_classes * (num_samples_per_class - update_batch_size), 28 * 28
-			"train_labels": train_labels, # batch_size, num_classes * (num_samples_per_class - update_batch_size), num_classes
-			"test_inputs": test_inputs, # batch_size, num_classes * update_batch_size, 28 * 28
-			"test_labels": test_labels, # batch_size, num_classes * update_batch_size, num_classes
+			# "train_inputs": train_inputs, # batch_size, num_classes * (num_samples_per_class - update_batch_size), 28 * 28
+			# "train_labels": train_labels, # batch_size, num_classes * (num_samples_per_class - update_batch_size), num_classes
+			"test_inputs": metatrain_image_tensor, # batch_size, num_classes * update_batch_size, 28 * 28
+			"test_labels": metatrain_label_tensor, # batch_size, num_classes * update_batch_size, num_classes
 		}
 
 		# Tensorflow queue for metavalidation dataset
-		metaval_image_tensor, metaval_label_tensor = data_generator.make_data_tensor(train=False)
-		train_inputs = tf.slice(metaval_image_tensor, [0, 0, 0], [-1, FLAGS.num_classes*num_shot_train, -1])
-		test_inputs = tf.slice(metaval_image_tensor, [0, FLAGS.num_classes*num_shot_train, 0], [-1, -1, -1])
-		train_labels = tf.slice(metaval_label_tensor, [0, 0, 0], [-1, FLAGS.num_classes*num_shot_train, -1])
-		test_labels = tf.slice(metaval_label_tensor, [0, FLAGS.num_classes*num_shot_train, 0], [-1, -1, -1])
-		metaval_input_tensors = {
-			"train_inputs": train_inputs, # batch_size, num_classes * (num_samples_per_class - update_batch_size), 28 * 28
-			"train_labels": train_labels, # batch_size, num_classes * (num_samples_per_class - update_batch_size), num_classes
-			"test_inputs": test_inputs, # batch_size, num_classes * update_batch_size, 28 * 28
-			"test_labels": test_labels, # batch_size, num_classes * update_batch_size, num_classes
-		}
+		# metaval_image_tensor, metaval_label_tensor = data_generator.make_data_tensor(train=False)
+		# train_inputs = tf.slice(metaval_image_tensor, [0, 0, 0], [-1, FLAGS.num_classes*num_shot_train, -1])
+		# test_inputs = tf.slice(metaval_image_tensor, [0, FLAGS.num_classes*num_shot_train, 0], [-1, -1, -1])
+		# train_labels = tf.slice(metaval_label_tensor, [0, 0, 0], [-1, FLAGS.num_classes*num_shot_train, -1])
+		# test_labels = tf.slice(metaval_label_tensor, [0, FLAGS.num_classes*num_shot_train, 0], [-1, -1, -1])
+		# metaval_input_tensors = {
+		# 	"train_inputs": train_inputs, # batch_size, num_classes * (num_samples_per_class - update_batch_size), 28 * 28
+		# 	"train_labels": train_labels, # batch_size, num_classes * (num_samples_per_class - update_batch_size), num_classes
+		# 	"test_inputs": test_inputs, # batch_size, num_classes * update_batch_size, 28 * 28
+		# 	"test_labels": test_labels, # batch_size, num_classes * update_batch_size, num_classes
+		# }
 
 		# Graphs for metatraining and metavalidation
 		# using scope reuse=tf.AUTO_REUSE, not sure if this is the best way to do it
 
 		if FLAGS.datasource == "miniimagenet":
 			model_metatrain = CNN_MiniImagenet("model", n_way=FLAGS.num_classes, layers=4, input_tensors=metatrain_input_tensors)
-		elif FLAGS.datasource == "cifar":
-			model_metatrain = CNN_cifar("model", n_way=FLAGS.num_classes, layers=4, input_tensors=metatrain_input_tensors)
 		else:
 			model_metatrain = CNN2("model", n_way=FLAGS.num_classes, layers=4, input_tensors=metatrain_input_tensors)
 		# WIP adaResNet
 		# model_metatrain = adaResNetModel("model", n=num_classes, input_tensors=input_tensors, logdir=FLAGS.logdir + "train")
 
-		if FLAGS.datasource == "miniimagenet":
-			model_metaval = CNN_MiniImagenet("model", n_way=FLAGS.num_classes, layers=4, input_tensors=metaval_input_tensors)
-		elif FLAGS.datasource == "cifar":
-			model_metaval = CNN_cifar("model", n_way=FLAGS.num_classes, layers=4, input_tensors=metaval_input_tensors)
-		else:
-			model_metaval = CNN2("model", n_way=FLAGS.num_classes, layers=4, input_tensors=metaval_input_tensors)
+		# if FLAGS.datasource == "miniimagenet":
+		# 	model_metaval = CNN_MiniImagenet("model", n_way=FLAGS.num_classes, layers=4, input_tensors=metaval_input_tensors)
+		# else:
+		# 	model_metaval = CNN2("model", n_way=FLAGS.num_classes, layers=4, input_tensors=metaval_input_tensors)
 		# WIP adaResNet
 		# model_metaval = adaResNetModel("model", n=num_classes, input_tensors=input_tensors, logdir=FLAGS.logdir + "val", is_training=model_metatrain.is_training)
 
 		sess = tf.InteractiveSession()
 		tf.global_variables_initializer().run()
-		if FLAGS.load:
-			model_metatrain.load(sess, FLAGS.savepath, verbose=True)
-			model_metaval.load(sess, FLAGS.savepath, verbose=True)
-
-		# print(sess.run([model_metatrain.scale, model_metaval.scale]))
-		# quit()
 		tf.train.start_queue_runners()
 
-		saved_metaval_loss = np.inf
+		saved_metatrain_loss = np.inf
 		metatrain_iterations = FLAGS.metatrain_iterations or 40000
 		try:
 			for step in np.arange(metatrain_iterations):
 				# _ = sess.run(model_metatrain.ae_optimize)
-				metatrain_loss, metatrain_postaccuracy, _ = sess.run([model_metatrain.loss, model_metatrain.test_accuracy, model_metatrain.optimize], {model_metatrain.is_training: True})
-				# metatrain_loss, metatrain_postaccuracy = sess.run([model_metatrain.loss, model_metatrain.test_accuracy], {model_metatrain.is_training: True})
+				metatrain_loss, _ = sess.run([model_metatrain.reg_loss, model_metatrain.reg_optimize], {model_metatrain.is_training: True})
 				if step > 0 and step % FLAGS.print_every == 0:
 					# model_metatrain.writer.add_summary(metatrain_summary, step)
-					print("Step #{} - Loss : {:.3f} - PreAcc : {:.3f} - PostAcc : {:.3f}".format(step, metatrain_loss, 0, metatrain_postaccuracy))
+					print("Step #{} - Loss : {:.3f} - PreAcc : {:.3f} - PostAcc : {:.3f}".format(step, metatrain_loss, 0, 0))
 				if step > 0 and (step % FLAGS.validate_every == 0 or step == (metatrain_iterations - 1)):
 					if step == (metatrain_iterations - 1):
 						print("Training complete!")
-					metaval_loss, metaval_postaccuracy = sess.run([model_metaval.loss, model_metaval.test_accuracy], {model_metaval.is_training: False})
+					# metaval_loss, metaval_postaccuracy = sess.run([model_metaval.loss, model_metaval.test_accuracy], {model_metaval.is_training: False})
 					# model_metaval.writer.add_summary(metaval_summary, step)
-					print("Validation Results - Loss : {:.3f} - PreAcc : {:.3f} - PostAcc : {:.3f}".format(metaval_loss, 0, metaval_postaccuracy))
-					if metaval_loss < saved_metaval_loss:
-						saved_metaval_loss = metaval_loss
+					# print("Validation Results - Loss : {:.3f} - PreAcc : {:.3f} - PostAcc : {:.3f}".format(metaval_loss, 0, metaval_postaccuracy))
+					if metatrain_loss < saved_metatrain_loss:
+						saved_metatrain_loss = metatrain_loss
 						model_metatrain.save(sess, FLAGS.savepath, global_step=step, verbose=True)
 		# Catch Ctrl-C event and allow save option
 		except KeyboardInterrupt:
@@ -143,7 +131,7 @@ def main(unused_args):
 			else:
 				print("Latest model not saved.")
 
-	if FLAGS.test and FLAGS.datasource in ["omniglot", "miniimagenet", "cifar"]:
+	if FLAGS.test and FLAGS.datasource in ["omniglot", "miniimagenet"]:
 
 		NUM_TEST_SAMPLES = 600
 
@@ -175,8 +163,6 @@ def main(unused_args):
 
 		if FLAGS.datasource == "miniimagenet":
 			model = CNN_MiniImagenet("model", n_way=FLAGS.num_classes, layers=4, input_tensors=input_tensors)
-		elif FLAGS.datasource == "cifar":
-			model = CNN_cifar("model", n_way=FLAGS.num_classes, layers=4, input_tensors=input_tensors)
 		else:
 			model = CNN2("model", n_way=FLAGS.num_classes, layers=4, input_tensors=input_tensors)
 
