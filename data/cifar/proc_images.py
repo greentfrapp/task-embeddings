@@ -27,27 +27,33 @@ path_to_images = 'images/'
 #     if i % 500 == 0:
 #         print(i)
 
-names = []
-with open('train.txt', 'r') as file:
-    for line in file:
-        names.append(line.rstrip('\n'))
-names.sort()
-for name in names:
-    if not os.path.exists('train/' + name):
-        print(name)
-quit()
+# names = []
+# with open('train.txt', 'r') as file:
+#     for line in file:
+#         names.append(line.rstrip('\n'))
+# names.sort()
+# for name in names:
+#     if not os.path.exists('train/' + name):
+#         print(name)
+# quit()
 
 # Put in correct directory
 for datatype in ['train', 'val', 'test']:
     if not os.path.exists(datatype):
-        os.system('mkdir ' + datatype)
+        os.makedirs(datatype)
+        # os.system('mkdir ' + datatype)
 
     with open(datatype + '.txt', 'r') as file:
         for line in file:
             label = line.rstrip('\n')
-            new_dir = datatype + '/'
+            new_dir = datatype + '/' + label + '/'
             old_dir = path_to_images + label + '/'
+            os.makedirs(new_dir)
+            # os.system('mv ' + old_dir + ' ' + new_dir)
             # os.system('mkdir ' + new_dir)
-            # filenames = glob.glob(path_to_images + label + '/')
-            # for old_dir in filenames:
-            os.system('mv ' + old_dir + ' ' + new_dir)
+            filenames = glob.glob(path_to_images + label + '/*.png')
+            for old_path in filenames:
+                old_path = old_path.replace('\\', '/')
+                new_path = new_dir + old_path.split('/')[-1].split('\\')[-1]
+                os.rename(old_path, new_path)
+

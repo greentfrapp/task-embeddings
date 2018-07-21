@@ -10,14 +10,17 @@ def unpickle(file):
 
 datafiles = ['test', 'train']
 
-labels = [label.decode('utf-8') for label in unpickle('meta')[b'fine_label_names']]
+labels = [label.decode('utf-8') for label in unpickle('cifar-100-python/meta')[b'fine_label_names']]
+
+if not os.path.exists('images/'):
+	os.makedirs('images/')
 
 for label in labels:
 	if not os.path.exists('images/' + label):
-		os.system('mkdir images/' + label + '/')
+		os.makedirs('images/' + label + '/')
 
 for datafile in datafiles:
-	data_dict = unpickle(datafile)
+	data_dict = unpickle('cifar-100-python/' + datafile)
 	for i, image in enumerate(data_dict[b'data']):
 		label = labels[int(data_dict[b'fine_labels'][i])]
 		new_path = 'images/' + label + '/' + data_dict[b'filenames'][i].decode('utf-8')

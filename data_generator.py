@@ -144,9 +144,10 @@ class DataGenerator(object):
             # temp
             # save and reload pickle for fast iteration
             else:
-                with open("cifar_filenames_5way1shot.pkl", 'rb') as file:
+                with open("cifar_filenames_15way1shot.pkl", 'rb') as file:
                     # pickle.dump(all_filenames, file)
                     all_filenames = pickle.load(file)
+                # quit()
                 labels = list(np.concatenate(np.array(self.num_samples_per_class * [list(range(self.num_classes))]).T, axis=0))
         else:
             all_filenames = []
