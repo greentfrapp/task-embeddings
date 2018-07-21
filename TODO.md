@@ -1,5 +1,7 @@
 # TODO
 
+- [x] Implement on CIFAR-FS
+- [ ] List hyperparameters and combinations
 - [ ] Implement on miniImagenet
 - [ ] Try using layer_norm instead of batch_norm in the networks
 - [ ] Compare with cosine similarity ie. train with normalized feature and weight vectors and train a scale value
