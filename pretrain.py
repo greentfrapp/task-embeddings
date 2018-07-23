@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 from absl import flags
 from absl import app
 
-from models import CNN, CNN2, CNN_MiniImagenet, FFN, ResNet
+from models import CNN, CNN2, CNN_MiniImagenet, FFN, ResNet, CNN_cifar
 from data_generator import DataGenerator
 
 
@@ -43,10 +43,10 @@ flags.DEFINE_integer("print_every", 100, "Frequency for printing training loss a
 
 def main(unused_args):
 
-	if FLAGS.train and FLAGS.datasource in ["omniglot", "miniimagenet"]:
+	if FLAGS.train and FLAGS.datasource in ["omniglot", "miniimagenet", "cifar"]:
 
 		num_shot_train = FLAGS.num_shot_train or 0
-		num_shot_test = FLAGS.num_shot_test or 64
+		num_shot_test = FLAGS.num_shot_test or 4
 
 		data_generator = DataGenerator(
 			datasource=FLAGS.datasource,
@@ -67,8 +67,8 @@ def main(unused_args):
 		metatrain_input_tensors = {
 			# "train_inputs": train_inputs, # batch_size, num_classes * (num_samples_per_class - update_batch_size), 28 * 28
 			# "train_labels": train_labels, # batch_size, num_classes * (num_samples_per_class - update_batch_size), num_classes
-			"test_inputs": metatrain_image_tensor, # batch_size, num_classes * update_batch_size, 28 * 28
-			"test_labels": metatrain_label_tensor, # batch_size, num_classes * update_batch_size, num_classes
+			"pretrain_inputs": metatrain_image_tensor, # batch_size, num_classes * update_batch_size, 28 * 28
+			"pretrain_labels": metatrain_label_tensor, # batch_size, num_classes * update_batch_size, num_classes
 		}
 
 		# Tensorflow queue for metavalidation dataset
@@ -89,6 +89,8 @@ def main(unused_args):
 
 		if FLAGS.datasource == "miniimagenet":
 			model_metatrain = CNN_MiniImagenet("model", n_way=FLAGS.num_classes, layers=4, input_tensors=metatrain_input_tensors)
+		elif FLAGS.datasource == "cifar":
+			model_metatrain = CNN_cifar("model", n_way=FLAGS.num_classes, layers=4, input_tensors=metatrain_input_tensors, noise=True)
 		else:
 			model_metatrain = CNN2("model", n_way=FLAGS.num_classes, layers=4, input_tensors=metatrain_input_tensors)
 		# WIP adaResNet
@@ -110,7 +112,7 @@ def main(unused_args):
 		try:
 			for step in np.arange(metatrain_iterations):
 				# _ = sess.run(model_metatrain.ae_optimize)
-				metatrain_loss, _ = sess.run([model_metatrain.reg_loss, model_metatrain.reg_optimize], {model_metatrain.is_training: True})
+				metatrain_loss, _ = sess.run([model_metatrain.pretrain_loss, model_metatrain.pretrain_optimize], {model_metatrain.is_training: True})
 				if step > 0 and step % FLAGS.print_every == 0:
 					# model_metatrain.writer.add_summary(metatrain_summary, step)
 					print("Step #{} - Loss : {:.3f} - PreAcc : {:.3f} - PostAcc : {:.3f}".format(step, metatrain_loss, 0, 0))
@@ -188,13 +190,13 @@ def main(unused_args):
 		print("StdDev                  : {:.4f}".format(stdev))
 		print("95% Confidence Interval : {:.4f}".format(ci95))
 
-	if FLAGS.train and FLAGS.datasource == "sinusoid":
+	if FLAGS.train and FLAGS.datasource in ["sinusoid", "multimodal"]:
 
 		num_shot_train = FLAGS.num_shot_train or 10
 		num_shot_test = FLAGS.num_shot_test or 10
 
 		data_generator = DataGenerator(
-			datasource="sinusoid",
+			datasource=FLAGS.datasource,
 			num_classes=None,
 			num_samples_per_class=num_shot_train+num_shot_test,
 			batch_size=FLAGS.meta_batch_size,
@@ -210,7 +212,11 @@ def main(unused_args):
 		metatrain_iterations = FLAGS.metatrain_iterations or 50000
 		try:
 			for step in np.arange(metatrain_iterations):
-				batch_x, batch_y, amp, phase = data_generator.generate()
+				if datasource == "multimodal":
+					batch_x, batch_y, amp, phase, slope, intercept, modes = data_generator.generate()
+					amp = amp * modes + (modes == False).astype(np.float32)
+				else:
+					batch_x, batch_y, amp, phase = data_generator.generate()
 				train_inputs = batch_x[:, :num_shot_train, :]
 				train_labels = batch_y[:, :num_shot_train, :]
 				test_inputs = batch_x[:, num_shot_train:, :]
@@ -241,12 +247,12 @@ def main(unused_args):
 			else:
 				print("Latest model not saved.")
 
-	if FLAGS.test and FLAGS.datasource == "sinusoid":
+	if FLAGS.test and FLAGS.datasource in ["sinusoid", "multimodal"]:
 
 		num_shot_train = FLAGS.num_shot_train or 10
 
 		data_generator = DataGenerator(
-			datasource="sinusoid",
+			datasource=FLAGS.datasource,
 			num_classes=None,
 			num_samples_per_class=num_shot_train,
 			batch_size=1,
@@ -258,10 +264,18 @@ def main(unused_args):
 		sess = tf.InteractiveSession()
 		model.load(sess, FLAGS.savepath, verbose=True)
 
-		train_inputs, train_labels, amp, phase = data_generator.generate()
-
-		x = np.arange(-5., 5., 0.2)
-		y = amp * np.sin(x - phase)
+		if datasource == "multimodal":
+			train_inputs, train_labels, amp, phase, slope, intercept, modes = data_generator.generate()
+			amp = amp * modes + (modes == False).astype(np.float32)
+			x = np.arange(-5., 5., 0.2)
+			if modes[0] == 0:
+				y = slope * x + intercept
+			else:
+				y = amp * np.sin(x - phase)
+		else:
+			train_inputs, train_labels, amp, phase = data_generator.generate()
+			x = np.arange(-5., 5., 0.2)
+			y = amp * np.sin(x - phase)
 
 		# feed_dict = {
 		# 	model.train_inputs: x.reshape(int(50/num_shot_train), -1, 1)

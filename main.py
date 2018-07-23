@@ -20,6 +20,7 @@ FLAGS = flags.FLAGS
 flags.DEFINE_bool("train", False, "Train")
 flags.DEFINE_bool("test", False, "Test")
 flags.DEFINE_bool("load", False, "Resume training from a saved model")
+flags.DEFINE_bool("plot", False, "Plot activations of training samples")
 
 # Task parameters
 flags.DEFINE_string("datasource", "omniglot", "omniglot or sinusoid (miniimagenet WIP)")
@@ -111,9 +112,6 @@ def main(unused_args):
 		if FLAGS.load:
 			model_metatrain.load(sess, FLAGS.savepath, verbose=True)
 			model_metaval.load(sess, FLAGS.savepath, verbose=True)
-
-		# print(sess.run([model_metatrain.scale, model_metaval.scale]))
-		# quit()
 		tf.train.start_queue_runners()
 
 		saved_metaval_loss = np.inf
@@ -185,6 +183,27 @@ def main(unused_args):
 		model.load(sess, FLAGS.savepath, verbose=True)
 		tf.train.start_queue_runners()
 
+		# BEGIN PLOT
+		if FLAGS.plot:
+			activations, labels = sess.run([model.train_running_output, model.train_labels], {model.is_training: False})
+			activations = activations.reshape([-1, 2 * 2 * 64])
+			from sklearn.manifold import TSNE
+			from sklearn.decomposition import PCA
+			pca = PCA(50)
+			print("Compressing with PCA...")
+			activations_50dim = pca.fit_transform(activations)
+			tsne = TSNE()
+			print("Compressing with tSNE...")
+			activations_2dim = tsne.fit_transform(activations_50dim)
+			labels = np.argmax(labels, axis=1)
+			fig, ax = plt.subplots()
+			for i in np.arange(5):
+				ax.scatter(activations_2dim[np.where(labels==i)][:, 0], activations_2dim[np.where(labels==i)][:, 1], s=5.)
+			plt.show()
+			quit()
+
+		# END PLOT
+
 		accuracy_list = []
 
 		for task in np.arange(NUM_TEST_SAMPLES):
@@ -202,13 +221,13 @@ def main(unused_args):
 		print("StdDev                  : {:.4f}".format(stdev))
 		print("95% Confidence Interval : {:.4f}".format(ci95))
 
-	if FLAGS.train and FLAGS.datasource == "sinusoid":
+	if FLAGS.train and FLAGS.datasource in ["sinusoid", "multimodal"]:
 
 		num_shot_train = FLAGS.num_shot_train or 10
 		num_shot_test = FLAGS.num_shot_test or 10
 
 		data_generator = DataGenerator(
-			datasource="sinusoid",
+			datasource=FLAGS.datasource,
 			num_classes=None,
 			num_samples_per_class=num_shot_train+num_shot_test,
 			batch_size=FLAGS.meta_batch_size,
@@ -224,7 +243,11 @@ def main(unused_args):
 		metatrain_iterations = FLAGS.metatrain_iterations or 50000
 		try:
 			for step in np.arange(metatrain_iterations):
-				batch_x, batch_y, amp, phase = data_generator.generate()
+				if FLAGS.datasource == "multimodal":
+					batch_x, batch_y, amp, phase, slope, intercept, modes = data_generator.generate()
+					amp = amp * modes + (modes == False).astype(np.float32)
+				else:
+					batch_x, batch_y, amp, phase = data_generator.generate()
 				train_inputs = batch_x[:, :num_shot_train, :]
 				train_labels = batch_y[:, :num_shot_train, :]
 				test_inputs = batch_x[:, num_shot_train:, :]
@@ -255,12 +278,12 @@ def main(unused_args):
 			else:
 				print("Latest model not saved.")
 
-	if FLAGS.test and FLAGS.datasource == "sinusoid":
+	if FLAGS.test and FLAGS.datasource in ["sinusoid", "multimodal"]:
 
 		num_shot_train = FLAGS.num_shot_train or 10
 
 		data_generator = DataGenerator(
-			datasource="sinusoid",
+			datasource=FLAGS.datasource,
 			num_classes=None,
 			num_samples_per_class=num_shot_train,
 			batch_size=1,
@@ -272,10 +295,18 @@ def main(unused_args):
 		sess = tf.InteractiveSession()
 		model.load(sess, FLAGS.savepath, verbose=True)
 
-		train_inputs, train_labels, amp, phase = data_generator.generate()
-
-		x = np.arange(-5., 5., 0.2)
-		y = amp * np.sin(x - phase)
+		if FLAGS.datasource == "multimodal":
+			train_inputs, train_labels, amp, phase, slope, intercept, modes = data_generator.generate()
+			amp = amp * modes + (modes == False).astype(np.float32)
+			x = np.arange(-5., 5., 0.2)
+			if modes[0] == 0:
+				y = slope * x + intercept
+			else:
+				y = amp * np.sin(x - phase)
+		else:
+			train_inputs, train_labels, amp, phase = data_generator.generate()
+			x = np.arange(-5., 5., 0.2)
+			y = amp * np.sin(x - phase)
 
 		# feed_dict = {
 		# 	model.train_inputs: x.reshape(int(50/num_shot_train), -1, 1)

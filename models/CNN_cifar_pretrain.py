@@ -81,23 +81,56 @@ class CNN_cifar(object):
 
 	def build_model(self, layers=3, input_tensors=None, noise=False):
 
-		num_classes = self.n_way
-		self.train_inputs = tf.reshape(input_tensors['train_inputs'], [-1, 32, 32, 3])
-		self.test_inputs = tf.reshape(input_tensors['test_inputs'], [-1, 32, 32, 3])
-		if tf.shape(input_tensors['train_labels'])[-1] != self.n_way:
-			self.train_labels = tf.reshape(tf.one_hot(tf.argmax(input_tensors['train_labels'], axis=2), depth=num_classes), [-1, num_classes])
-			self.test_labels = tf.reshape(tf.one_hot(tf.argmax(input_tensors['test_labels'], axis=2), depth=num_classes), [-1, num_classes])
+		if 'test_inputs' not in input_tensors:
+			num_classes = self.n_way
+			self.train_inputs = tf.placeholder(
+				shape=(None, 32, 32, 3),
+				dtype=tf.float32,
+			)
+			self.test_inputs = tf.placeholder(
+				shape=(None, 32, 32, 3),
+				dtype=tf.float32,
+			)
+			self.train_labels = tf.placeholder(
+				shape=(None, num_classes),
+				dtype=tf.float32,
+			)
+			self.test_labels = tf.placeholder(
+				shape=(None, num_classes),
+				dtype=tf.float32,
+			)
+			self.pretrain_inputs = tf.reshape(input_tensors['pretrain_inputs'], [-1, 32, 32, 3])
+			if tf.shape(input_tensors['pretrain_labels'])[-1] != self.n_way:
+				self.pretrain_labels = tf.reshape(tf.one_hot(tf.argmax(input_tensors['pretrain_labels'], axis=2), depth=num_classes), [-1, num_classes])
+			else:
+				self.pretrain_labels = tf.reshape(input_tensors['pretrain_labels'], [-1, num_classes])
+			batchsize = 1
 		else:
-			self.train_labels = tf.reshape(input_tensors['train_labels'], [-1, num_classes])
-			self.test_labels = tf.reshape(input_tensors['test_labels'], [-1, num_classes])
+			num_classes = self.n_way
+			self.pretrain_inputs = tf.placeholder(
+				shape=(None, 32, 32, 3),
+				dtype=tf.float32,
+			)
+			self.pretrain_labels = tf.placeholder(
+				shape=(None, num_classes),
+				dtype=tf.float32,
+			)
+			self.train_inputs = tf.reshape(input_tensors['train_inputs'], [-1, 32, 32, 3])
+			self.test_inputs = tf.reshape(input_tensors['test_inputs'], [-1, 32, 32, 3])
+			if tf.shape(input_tensors['train_labels'])[-1] != self.n_way:
+				self.train_labels = tf.reshape(tf.one_hot(tf.argmax(input_tensors['train_labels'], axis=2), depth=num_classes), [-1, num_classes])
+				self.test_labels = tf.reshape(tf.one_hot(tf.argmax(input_tensors['test_labels'], axis=2), depth=num_classes), [-1, num_classes])
+			else:
+				self.train_labels = tf.reshape(input_tensors['train_labels'], [-1, num_classes])
+				self.test_labels = tf.reshape(input_tensors['test_labels'], [-1, num_classes])
+
+			batchsize = tf.shape(input_tensors['train_inputs'])[0]
 
 		self.is_training = tf.placeholder(
 			shape=(None),
 			dtype=tf.bool,
 			name="training_flag",
 		)
-
-		batchsize = tf.shape(input_tensors['train_inputs'])[0]
 
 		# Calculate class vectors
 		#	Embed training samples
@@ -258,13 +291,26 @@ class CNN_cifar(object):
 
 		self.logits = self.output
 
-		self.reg = tf.reduce_sum([tf.nn.l2_loss(var) for var in tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, self.name + '/attention')])
-
+		# self.reg = tf.reduce_sum([tf.nn.l2_loss(var) for var in tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, self.name + '/attention')])
+		attention_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, self.name + '/attention')
 		self.loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=self.test_labels, logits=self.logits))
-		self.optimize = tf.train.AdamOptimizer(learning_rate=3e-4).minimize(self.loss)
+		# self.optimize = tf.train.AdamOptimizer(learning_rate=3e-4).minimize(self.loss, var_list=attention_vars)
+		self.optimize = tf.train.AdamOptimizer(learning_rate=1e-3).minimize(self.loss)
 
 		self.test_accuracy = tf.contrib.metrics.accuracy(labels=tf.argmax(self.test_labels, axis=1), predictions=tf.argmax(self.logits, axis=1))
 		
+		net3 = Net(self.pretrain_inputs, layers, self.is_training)
+		pretrain_output = tf.reshape(net3.output, [-1, 2 * 2 * 64])
+		pretrain_final_dense = tf.get_variable(
+			name="pretrain_final_dense",
+			shape=(64, 2 * 2 * 64),
+			dtype=tf.float32,
+			trainable=True,
+		)
+		self.pretrain_output = tf.matmul(pretrain_output, pretrain_final_dense, transpose_b=True)
+		self.pretrain_loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=self.pretrain_labels, logits=self.pretrain_output))
+		self.pretrain_optimize = tf.train.AdamOptimizer(learning_rate=1e-3).minimize(self.pretrain_loss)
+
 	def attention(self, query, key, value):
 		dotp = tf.matmul(query, key, transpose_b=True) / (tf.cast(tf.shape(query)[-1], tf.float32) ** 0.5)
 		attention_weights = tf.nn.softmax(dotp)
