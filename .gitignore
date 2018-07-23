@@ -2,6 +2,7 @@ pretrained*/
 data/*/*
 !data/cifar/*.py
 !data/cifar/*.txt
+!data/cifar/*.md
 !data/miniImagenet/*.py
 !data/miniImagenet/*.csv
 !data/omniglot_resized/*.py
