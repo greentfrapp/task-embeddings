@@ -20,10 +20,12 @@ class Net(object):
 		self.is_training = is_training
 		with tf.variable_scope("net", reuse=tf.AUTO_REUSE):
 			running_output = inputs
+			n_filters = [64, 64, 64, 64]
 			for i in np.arange(layers):
+				filters = n_filters[i]
 				conv = tf.layers.conv2d(
 					inputs=running_output,
-					filters=64,
+					filters=filters,
 					kernel_size=(3, 3),
 					strides=(1, 1),
 					padding="same",
@@ -34,9 +36,10 @@ class Net(object):
 				)
 				norm = tf.contrib.layers.batch_norm(
 					inputs=conv,
-					activation_fn=tf.nn.relu,
+					activation_fn=None,
 					reuse=tf.AUTO_REUSE,
-					scope="model/net",
+					# scope="model/net"
+					scope="model/net/norm_{}".format(i),
 					# is_training=self.is_training,
 				)
 				maxpool = tf.layers.max_pooling2d(
@@ -45,11 +48,19 @@ class Net(object):
 					strides=(2, 2),
 					padding="valid",
 				)
-				running_output = maxpool
+				relu = tf.nn.leaky_relu(
+					features=maxpool,
+					alpha=0.1,
+				)
+				running_output = relu
 				if i == layers - 1 or i == layers - 2:
+					if i == layers - 1:
+						rate = 0.3
+					else:
+						rate = 0.1
 					running_output = tf.layers.dropout(
 						inputs=running_output,
-						rate=0.2,
+						rate=rate,
 						training=self.is_training,
 					)
 			self.output = running_output
@@ -57,17 +68,17 @@ class Net(object):
 
 class CNN_cifar(object):
 
-	def __init__(self, name, n_way=5, layers=3, input_tensors=None):
+	def __init__(self, name, n_way=5, layers=3, input_tensors=None, noise=False):
 		super(CNN_cifar, self).__init__()
 		self.name = name
 		self.hidden = 128
 		self.n_way = n_way
 		with tf.variable_scope(self.name, reuse=tf.AUTO_REUSE):
-			self.build_model(layers, input_tensors)
+			self.build_model(layers, input_tensors, noise)
 			variables = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, self.name)
 			self.saver = tf.train.Saver(var_list=variables, max_to_keep=3)
 
-	def build_model(self, layers=3, input_tensors=None):
+	def build_model(self, layers=3, input_tensors=None, noise=False):
 
 		num_classes = self.n_way
 		self.train_inputs = tf.reshape(input_tensors['train_inputs'], [-1, 32, 32, 3])
@@ -93,43 +104,69 @@ class CNN_cifar(object):
 		# (64, 5, 20000)
 		# train_running_output = tf.reshape(net.output, [batchsize, -1, (28 - layers) * (28 - layers) * 64])
 		train_running_output = tf.reshape(net.output, [batchsize, -1, 2 * 2 * 64])
-		# (64, 5, 128)
-		train_embed = tf.layers.dense(
-			inputs=train_running_output,
-			units=self.hidden,
-			activation=None,
-			name="train_embed",
+		noise_mask = tf.random_normal(
+			shape=(batchsize, 1, 2 * 2 * 64),
+			mean=1.0,
+			stddev=1.0,
+			dtype=tf.float32,
+			seed=None,
+			name="noise",
 		)
-		
-		for i in np.arange(3):
-			train_embed, _ = self.attention(
-				query=train_embed,
-				key=train_embed,
-				value=train_embed,
-			)
-			dense = tf.layers.dense(
-				inputs=train_embed,
-				units=self.hidden * 2,
-				activation=tf.nn.relu,
-				name="encoder_layer{}_dense1".format(i + 1)
-			)
-			# dense = tf.layers.dropout(
-			# 	inputs=train_embed,
-			# 	rate=0.2,
-			# 	training=self.is_training,
-			# )
-			train_embed += tf.layers.dense(
-				inputs=dense,
+		if noise:
+			train_running_output = train_running_output * noise_mask
+		# (64, 5, 128)
+
+		with tf.variable_scope("attention"):
+			train_embed = tf.layers.dense(
+				inputs=train_running_output,
 				units=self.hidden,
 				activation=None,
-				name="encoder_layer{}_dense2".format(i + 1)
+				name="train_embed",
 			)
-			# train_embed = tf.layers.dropout(
-			# 	inputs=train_embed,
-			# 	rate=0.2,
-			# 	training=self.is_training,
-			# )
-			train_embed = tf.contrib.layers.layer_norm(train_embed, begin_norm_axis=2)
+			
+			for i in np.arange(5):
+				train_embed, _ = self.attention(
+					query=train_embed,
+					key=train_embed,
+					value=train_embed,
+				)
+				dense = tf.layers.dense(
+					inputs=train_embed,
+					units=self.hidden * 2,
+					activation=tf.nn.relu,
+					name="encoder_layer{}_dense1".format(i + 1)
+				)
+				# if i == 4:
+				# 	dense = tf.layers.dropout(
+				# 		inputs=train_embed,
+				# 		rate=0.3,
+				# 		training=self.is_training,
+				# 	)
+				# if i == 3:
+				# 	dense = tf.layers.dropout(
+				# 		inputs=train_embed,
+				# 		rate=0.1,
+				# 		training=self.is_training,
+				# 	)
+				train_embed += tf.layers.dense(
+					inputs=dense,
+					units=self.hidden,
+					activation=None,
+					name="encoder_layer{}_dense2".format(i + 1)
+				)
+				# train_embed = tf.layers.dropout(
+				# 	inputs=train_embed,
+				# 	rate=0.2,
+				# 	training=self.is_training,
+				# )
+				train_embed = tf.contrib.layers.layer_norm(train_embed, begin_norm_axis=2)
+
+			output_weights = tf.layers.dense(
+				inputs=train_embed,
+				# units=(28 - layers) * (28 - layers) * 64,
+				units=2 * 2 * 64,
+				activation=None,
+			)
 
 		net2 = Net(self.test_inputs, layers, self.is_training)
 		# running_output = tf.reshape(net2.output, [batchsize, -1, (28 - layers) * (28 - layers) * 64])
@@ -137,12 +174,6 @@ class CNN_cifar(object):
 
 		self.running_output = running_output #/ tf.norm(running_output, axis=-1, keep_dims=True)
 
-		output_weights = tf.layers.dense(
-			inputs=train_embed,
-			# units=(28 - layers) * (28 - layers) * 64,
-			units=2 * 2 * 64,
-			activation=None,
-		)
 		# ((64, 5, 5).T * (64, 5, 20000)) -> (64, 5, 20000) / (64, 5, 1)
 		train_labels = tf.reshape(self.train_labels, [batchsize, -1, self.n_way])
 		# output_weights = tf.matmul(train_labels, output_weights, transpose_a=True)

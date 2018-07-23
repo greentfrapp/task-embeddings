@@ -14,3 +14,5 @@
 # Ideas
 
 - [ ] Increase number of layers in "decision" component, use SGD to train that part instead of simply attention; similar to a semi-MAML
+- [ ] Alternately backprop feature extractor and attention components
+- [ ] Add noise to output of feature extractor before passing to component

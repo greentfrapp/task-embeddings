@@ -91,7 +91,7 @@ def main(unused_args):
 		if FLAGS.datasource == "miniimagenet":
 			model_metatrain = CNN_MiniImagenet("model", n_way=FLAGS.num_classes, layers=4, input_tensors=metatrain_input_tensors)
 		elif FLAGS.datasource == "cifar":
-			model_metatrain = CNN_cifar("model", n_way=FLAGS.num_classes, layers=4, input_tensors=metatrain_input_tensors)
+			model_metatrain = CNN_cifar("model", n_way=FLAGS.num_classes, layers=4, input_tensors=metatrain_input_tensors, noise=True)
 		else:
 			model_metatrain = CNN2("model", n_way=FLAGS.num_classes, layers=4, input_tensors=metatrain_input_tensors)
 		# WIP adaResNet
@@ -100,7 +100,7 @@ def main(unused_args):
 		if FLAGS.datasource == "miniimagenet":
 			model_metaval = CNN_MiniImagenet("model", n_way=FLAGS.num_classes, layers=4, input_tensors=metaval_input_tensors)
 		elif FLAGS.datasource == "cifar":
-			model_metaval = CNN_cifar("model", n_way=FLAGS.num_classes, layers=4, input_tensors=metaval_input_tensors)
+			model_metaval = CNN_cifar("model", n_way=FLAGS.num_classes, layers=4, input_tensors=metaval_input_tensors, noise=False)
 		else:
 			model_metaval = CNN2("model", n_way=FLAGS.num_classes, layers=4, input_tensors=metaval_input_tensors)
 		# WIP adaResNet
@@ -176,7 +176,7 @@ def main(unused_args):
 		if FLAGS.datasource == "miniimagenet":
 			model = CNN_MiniImagenet("model", n_way=FLAGS.num_classes, layers=4, input_tensors=input_tensors)
 		elif FLAGS.datasource == "cifar":
-			model = CNN_cifar("model", n_way=FLAGS.num_classes, layers=4, input_tensors=input_tensors)
+			model = CNN_cifar("model", n_way=FLAGS.num_classes, layers=4, input_tensors=input_tensors, noise=False)
 		else:
 			model = CNN2("model", n_way=FLAGS.num_classes, layers=4, input_tensors=input_tensors)
 
