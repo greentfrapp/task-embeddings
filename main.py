@@ -86,27 +86,23 @@ def main(unused_args):
 			"test_labels": test_labels, # batch_size, num_classes * update_batch_size, num_classes
 		}
 
-		# Graphs for metatraining and metavalidation
+		# Graph for metatraining
 		# using scope reuse=tf.AUTO_REUSE, not sure if this is the best way to do it
-
 		if FLAGS.datasource == "miniimagenet":
 			model_metatrain = CNN_MiniImagenet("model", n_way=FLAGS.num_classes, layers=4, input_tensors=metatrain_input_tensors)
 		elif FLAGS.datasource == "cifar":
 			model_metatrain = CNN_cifar("model", n_way=FLAGS.num_classes, layers=4, input_tensors=metatrain_input_tensors, noise=True)
 		else:
 			model_metatrain = CNN2("model", n_way=FLAGS.num_classes, layers=4, input_tensors=metatrain_input_tensors)
-		# WIP adaResNet
-		# model_metatrain = adaResNetModel("model", n=num_classes, input_tensors=input_tensors, logdir=FLAGS.logdir + "train")
-
+		
+		# Graph for metavalidation
 		if FLAGS.datasource == "miniimagenet":
 			model_metaval = CNN_MiniImagenet("model", n_way=FLAGS.num_classes, layers=4, input_tensors=metaval_input_tensors)
 		elif FLAGS.datasource == "cifar":
 			model_metaval = CNN_cifar("model", n_way=FLAGS.num_classes, layers=4, input_tensors=metaval_input_tensors, noise=False)
 		else:
 			model_metaval = CNN2("model", n_way=FLAGS.num_classes, layers=4, input_tensors=metaval_input_tensors)
-		# WIP adaResNet
-		# model_metaval = adaResNetModel("model", n=num_classes, input_tensors=input_tensors, logdir=FLAGS.logdir + "val", is_training=model_metatrain.is_training)
-
+		
 		sess = tf.InteractiveSession()
 		tf.global_variables_initializer().run()
 		if FLAGS.load:
@@ -118,18 +114,18 @@ def main(unused_args):
 		metatrain_iterations = FLAGS.metatrain_iterations or 40000
 		try:
 			for step in np.arange(metatrain_iterations):
-				# _ = sess.run(model_metatrain.ae_optimize)
 				metatrain_loss, metatrain_postaccuracy, _ = sess.run([model_metatrain.loss, model_metatrain.test_accuracy, model_metatrain.optimize], {model_metatrain.is_training: True})
-				# metatrain_loss, metatrain_postaccuracy = sess.run([model_metatrain.loss, model_metatrain.test_accuracy], {model_metatrain.is_training: True})
 				if step > 0 and step % FLAGS.print_every == 0:
 					# model_metatrain.writer.add_summary(metatrain_summary, step)
 					print("Step #{} - Loss : {:.3f} - PreAcc : {:.3f} - PostAcc : {:.3f}".format(step, metatrain_loss, 0, metatrain_postaccuracy))
+					train_loss.append([int(step), float(metatrain_loss)])
 				if step > 0 and (step % FLAGS.validate_every == 0 or step == (metatrain_iterations - 1)):
 					if step == (metatrain_iterations - 1):
 						print("Training complete!")
 					metaval_loss, metaval_postaccuracy = sess.run([model_metaval.loss, model_metaval.test_accuracy], {model_metaval.is_training: False})
 					# model_metaval.writer.add_summary(metaval_summary, step)
 					print("Validation Results - Loss : {:.3f} - PreAcc : {:.3f} - PostAcc : {:.3f}".format(metaval_loss, 0, metaval_postaccuracy))
+					val_loss.append([int(step), float(metaval_loss)])
 					if metaval_loss < saved_metaval_loss:
 						saved_metaval_loss = metaval_loss
 						model_metatrain.save(sess, FLAGS.savepath, global_step=step, verbose=True)
@@ -159,7 +155,6 @@ def main(unused_args):
 		)
 
 		image_tensor, label_tensor = data_generator.make_data_tensor(train=False)
-
 		train_inputs = tf.slice(image_tensor, [0, 0, 0], [-1, num_test_classes*num_shot_train, -1])
 		test_inputs = tf.slice(image_tensor, [0, num_test_classes*num_shot_train, 0], [-1, -1, -1])
 		train_labels = tf.slice(label_tensor, [0, 0, 0], [-1, num_test_classes*num_shot_train, -1])
@@ -186,7 +181,7 @@ def main(unused_args):
 		# BEGIN PLOT
 		if FLAGS.plot:
 			activations, labels = sess.run([model.train_running_output, model.train_labels], {model.is_training: False})
-			activations = activations.reshape([-1, 2 * 2 * 64])
+			activations = activations.reshape([FLAGS.num_shot_train*FLAGS.num_classes, -1])
 			from sklearn.manifold import TSNE
 			from sklearn.decomposition import PCA
 			pca = PCA(50)
@@ -197,11 +192,10 @@ def main(unused_args):
 			activations_2dim = tsne.fit_transform(activations_50dim)
 			labels = np.argmax(labels, axis=1)
 			fig, ax = plt.subplots()
-			for i in np.arange(5):
+			for i in np.arange(FLAGS.num_classes):
 				ax.scatter(activations_2dim[np.where(labels==i)][:, 0], activations_2dim[np.where(labels==i)][:, 1], s=5.)
 			plt.show()
 			quit()
-
 		# END PLOT
 
 		accuracy_list = []
@@ -264,7 +258,6 @@ def main(unused_args):
 				if step > 0 and step % FLAGS.print_every == 0:
 					# model.writer.add_summary(metatrain_summary, step)
 					print("Step #{} - PreLoss : {:.3f} - PostLoss : {:.3f}".format(step, 0., metatrain_postloss))
-				# if step > 0 and (step % FLAGS.validate_every == 0 or step == (metatrain_iterations - 1)):
 					if step == (metatrain_iterations - 1):
 						print("Training complete!")
 					if metatrain_postloss < saved_loss:
@@ -308,12 +301,6 @@ def main(unused_args):
 			x = np.arange(-5., 5., 0.2)
 			y = amp * np.sin(x - phase)
 
-		# feed_dict = {
-		# 	model.train_inputs: x.reshape(int(50/num_shot_train), -1, 1)
-		# }
-
-		# prepredictions = sess.run(model.train_predictions, feed_dict)
-
 		feed_dict = {
 			model.train_inputs: train_inputs,
 			model.train_labels: train_labels,
@@ -325,8 +312,7 @@ def main(unused_args):
 		fig, ax = plt.subplots()
 		ax.plot(x, y, color="#2c3e50", linewidth=0.8, label="Truth")
 		ax.scatter(train_inputs.reshape(-1), train_labels.reshape(-1), color="#2c3e50", label="Training Set")
-		# ax.plot(x, prepredictions.reshape(-1), color="#f39c12", label="Before Shift", linestyle=':')
-		ax.plot(x, postprediction.reshape(-1), label="After Shift", color='#e74c3c', linestyle='--')
+		ax.plot(x, postprediction.reshape(-1), label="Prediction", color='#e74c3c', linestyle='--')
 		ax.legend()
 		plt.show()
 

@@ -35,9 +35,9 @@ class Net(object):
 				norm = tf.contrib.layers.batch_norm(
 					inputs=conv,
 					activation_fn=tf.nn.relu,
-					reuse=tf.AUTO_REUSE,
-					scope="model/net",
-					is_training=self.is_training,
+					# reuse=tf.AUTO_REUSE,
+					# scope="model/net/norm_{}".format(i),
+					# is_training=self.is_training,
 				)
 				maxpool = tf.layers.max_pooling2d(
 					inputs=norm,
@@ -107,9 +107,13 @@ class CNN2(object):
 		# Calculate class vectors
 		#	Embed training samples
 		self.net = net = Net(self.train_inputs, layers, self.is_training)
+		self.train_running_output = net.output
+		train_labels = tf.reshape(self.train_labels, [batchsize, -1, self.n_way])
+		train_running_output = tf.matmul(train_labels, tf.reshape(net.output, [batchsize, -1, 64]), transpose_a=True) / tf.expand_dims(tf.reduce_sum(train_labels, axis=1), axis=-1)
+		
 		# (64, 5, 20000)
 		# train_running_output = tf.reshape(net.output, [batchsize, -1, (28 - layers) * (28 - layers) * 64])
-		train_running_output = tf.reshape(net.output, [batchsize, -1, 64])
+		# train_running_output = tf.reshape(net.output, [batchsize, -1, 64])
 		# (64, 5, 128)
 		train_embed = tf.layers.dense(
 			inputs=train_running_output,
@@ -119,11 +123,11 @@ class CNN2(object):
 		)
 		
 		for i in np.arange(3):
-			train_embed, _ = self.attention(
-				query=train_embed,
-				key=train_embed,
-				value=train_embed,
-			)
+			# train_embed, _ = self.attention(
+			# 	query=train_embed,
+			# 	key=train_embed,
+			# 	value=train_embed,
+			# )
 			dense = tf.layers.dense(
 				inputs=train_embed,
 				units=self.hidden * 2,
@@ -142,7 +146,7 @@ class CNN2(object):
 		# running_output = tf.reshape(net2.output, [batchsize, -1, (28 - layers) * (28 - layers) * 64])
 		running_output = tf.reshape(net2.output, [batchsize, -1, 64])
 
-		self.running_output = running_output #/ tf.norm(running_output, axis=-1, keep_dims=True)
+		self.running_output = running_output / tf.norm(running_output, axis=-1, keep_dims=True)
 
 		output_weights = tf.layers.dense(
 			inputs=train_embed,
@@ -151,21 +155,21 @@ class CNN2(object):
 			activation=None,
 		)
 		# ((64, 5, 5).T * (64, 5, 20000)) -> (64, 5, 20000) / (64, 5, 1)
-		train_labels = tf.reshape(self.train_labels, [batchsize, -1, self.n_way])
+		# train_labels = tf.reshape(self.train_labels, [batchsize, -1, self.n_way])
 		# output_weights = tf.matmul(train_labels, output_weights, transpose_a=True)
-		output_weights = tf.matmul(train_labels, output_weights, transpose_a=True) / tf.expand_dims(tf.reduce_sum(train_labels, axis=1), axis=-1)
-		self.output_weights = output_weights #/ tf.norm(output_weights, axis=-1, keep_dims=True)
+		# output_weights = tf.matmul(train_labels, output_weights, transpose_a=True) / tf.expand_dims(tf.reduce_sum(train_labels, axis=1), axis=-1)
+		self.output_weights = output_weights / tf.norm(output_weights, axis=-1, keep_dims=True)
 		
-		# self.scale = tf.Variable(
-		# 	initial_value=10.,
-		# 	name="scale",
-		# 	# shape=(1),
-		# 	dtype=tf.float32,
-		# )
+		self.scale = tf.Variable(
+			initial_value=10.,
+			name="scale",
+			# shape=(1),
+			dtype=tf.float32,
+		)
 
 		# (64, 5, 20000) * (64, 5, 20000).T
 		self.output = tf.matmul(self.running_output, self.output_weights, transpose_b=True)
-		# self.output = self.output * self.scale
+		self.output = self.output * self.scale
 		self.output = tf.reshape(self.output, [-1, self.n_way])
 
 		self.logits = self.output

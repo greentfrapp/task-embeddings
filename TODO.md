@@ -11,6 +11,9 @@
 - [ ] Implement on RL tasks, refer to [MAML](https://arxiv.org/abs/1703.03400) and [SNAIL](https://arxiv.org/abs/1707.03141); MAML RL repo [here](https://github.com/cbfinn/maml_rl); MAESN [here](https://arxiv.org/abs/1802.07245)
 - [ ] Implement PyTorch version
 
+- [ ] Clean code
+- [ ] Add tensorboard logging
+
 # Ideas
 
 - [ ] Increase number of layers in "decision" component, use SGD to train that part instead of simply attention; similar to a semi-MAML
@@ -20,7 +23,7 @@
 # Results
 
 - [ ] Plot training and validation curves for multimodal, sinuosoid and omniglot with and without attention
-- [ ] Visualize tSNE for omniglot activations
+- [x] Visualize tSNE for omniglot activations
 - [ ] Experimental parameters on CIFAR - pretraining - None, 100 steps, 500, 1000, 2000
 - [ ] Experimental parameters on CIFAR - attention layers - 1, 2, 3, 4, 5
 - [ ] Experimental parameters on CIFAR - hidden dim - 64, 128, 256
