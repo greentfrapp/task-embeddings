@@ -65,16 +65,16 @@ class CNN_cifar(BaseModel):
 	def __init__(self, name, num_classes, input_tensors=None):
 		super(CNN_cifar, self).__init__()
 		self.name = name
-		self.num_classes = n_way
+		self.num_classes = num_classes
 		# Attention parameters
-		self.attention_layers = 3
-		self.hidden = 128
+		self.attention_layers = 1
+		self.hidden = 64
 		with tf.variable_scope(self.name, reuse=tf.AUTO_REUSE):
-			self.build_model(input_tensors, noise)
+			self.build_model(input_tensors)
 			variables = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, self.name)
 			self.saver = tf.train.Saver(var_list=variables, max_to_keep=3)
 
-	def build_model(self, input_tensors=None, noise=False):
+	def build_model(self, input_tensors=None):
 
 		self.train_inputs = tf.reshape(input_tensors['train_inputs'], [-1, 32, 32, 3])
 		self.test_inputs = tf.reshape(input_tensors['test_inputs'], [-1, 32, 32, 3])
@@ -92,7 +92,7 @@ class CNN_cifar(BaseModel):
 		# Extract training features
 		train_feature_extractor = FeatureExtractor(self.train_inputs, self.is_training)
 		train_labels = tf.reshape(self.train_labels, [batchsize, -1, self.num_classes])
-		self.train_running_output = train_features = tf.reshape(train_feature_extractor.output, [batchsize, -1, 2*2*64])
+		train_features = tf.reshape(train_feature_extractor.output, [batchsize, -1, 2*2*64])
 		# Take mean of features for each class
 		output_weights = tf.matmul(train_labels, train_features, transpose_a=True) / tf.expand_dims(tf.reduce_sum(train_labels, axis=1), axis=-1)
 		
@@ -134,20 +134,11 @@ class CNN_cifar(BaseModel):
 			)
 
 		# Gradient descent on training set
-		train_logits = tf.matmul(train_features, class_weights, transpose_b=True)
-		train_loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=self.train_labels, logits=train_logits))
-		grad_1 = tf.gradients(train_loss, class_weights)[0]
-		class_weights_1 = class_weights - 0.001 * grad_1
-
-		train_logits = tf.matmul(train_features, class_weights_1, transpose_b=True)
-		train_loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=self.train_labels, logits=train_logits))
-		grad_2 = tf.gradients(train_loss, class_weights_1)[0]
-		class_weights_2 = class_weights_1 - 0.001 * grad_2
-
-		train_logits = tf.matmul(train_features, class_weights_2, transpose_b=True)
-		train_loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=self.train_labels, logits=train_logits))
-		grad_3 = tf.gradients(train_loss, class_weights_2)[0]
-		class_weights_3 = class_weights_2 - 0.001 * grad_3
+		for i in np.arange(5):
+			train_logits = tf.matmul(train_features, class_weights, transpose_b=True)
+			train_loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=self.train_labels, logits=train_logits))
+			grad = tf.gradients(train_loss, class_weights)[0]
+			class_weights = class_weights - 0.01 * grad
 
 		# Extract test features
 		test_feature_extractor = FeatureExtractor(self.test_inputs, self.is_training)
@@ -163,7 +154,7 @@ class CNN_cifar(BaseModel):
 		# 	dtype=tf.float32,
 		# )
 
-		logits = tf.matmul(test_features, class_weights_3, transpose_b=True)
+		logits = tf.matmul(test_features, class_weights, transpose_b=True)
 		# logits = logits * self.scale
 		self.logits = logits = tf.reshape(logits, [-1, self.num_classes])
 
