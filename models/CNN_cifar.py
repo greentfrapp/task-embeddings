@@ -99,7 +99,7 @@ class CNN_cifar(BaseModel):
 		# Calculate class weights with attention
 		with tf.variable_scope("attention"):
 			train_embed = tf.layers.dense(
-				inputs=train_features,
+				inputs=output_weights,
 				units=self.hidden,
 				activation=None,
 				name="train_embed",
@@ -147,7 +147,7 @@ class CNN_cifar(BaseModel):
 		# 	dtype=tf.float32,
 		# )
 
-		logits = tf.matmul(class_weights, test_features, transpose_b=True)
+		logits = tf.matmul(test_features, class_weights, transpose_b=True)
 		# logits = logits * self.scale
 		self.logits = logits = tf.reshape(logits, [-1, self.num_classes])
 
