@@ -67,8 +67,8 @@ class CNN_cifar(BaseModel):
 		self.name = name
 		self.num_classes = num_classes
 		# Attention parameters
-		self.attention_layers = 1
-		self.hidden = 64
+		self.attention_layers = 3
+		self.hidden = 256
 		with tf.variable_scope(self.name, reuse=tf.AUTO_REUSE):
 			self.build_model(input_tensors)
 			variables = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, self.name)
@@ -133,6 +133,14 @@ class CNN_cifar(BaseModel):
 				kernel_initializer=tf.contrib.layers.xavier_initializer(),
 			)
 
+		class_weights = tf.get_variable(
+			name="init_weights",
+			shape=(1, 5, 2*2*64),
+			dtype=tf.float32,
+			trainable=True,
+		)
+		class_weights = tf.tile(class_weights, multiples=[batchsize, 1, 1])
+
 		# Gradient descent on training set
 		for i in np.arange(5):
 			train_logits = tf.matmul(train_features, class_weights, transpose_b=True)
@@ -160,5 +168,5 @@ class CNN_cifar(BaseModel):
 
 		# regularization = tf.reduce_sum([tf.nn.l2_loss(var) for var in tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, self.name + '/attention')])
 		self.loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=self.test_labels, logits=self.logits))
-		self.optimize = tf.train.AdamOptimizer(learning_rate=3e-4).minimize(self.loss)
+		self.optimize = tf.train.AdamOptimizer(learning_rate=1e-3).minimize(self.loss)
 		self.test_accuracy = tf.contrib.metrics.accuracy(labels=tf.argmax(self.test_labels, axis=1), predictions=tf.argmax(self.logits, axis=1))
