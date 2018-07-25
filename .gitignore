@@ -7,6 +7,8 @@ data/*/*
 !data/miniImagenet/*.csv
 !data/omniglot_resized/*.py
 saved_models/
+*filenames*
+losses/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

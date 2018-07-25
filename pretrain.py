@@ -93,16 +93,12 @@ def main(unused_args):
 			model_metatrain = CNN_cifar("model", n_way=FLAGS.num_classes, layers=4, input_tensors=metatrain_input_tensors, noise=True)
 		else:
 			model_metatrain = CNN2("model", n_way=FLAGS.num_classes, layers=4, input_tensors=metatrain_input_tensors)
-		# WIP adaResNet
-		# model_metatrain = adaResNetModel("model", n=num_classes, input_tensors=input_tensors, logdir=FLAGS.logdir + "train")
-
+		
 		# if FLAGS.datasource == "miniimagenet":
 		# 	model_metaval = CNN_MiniImagenet("model", n_way=FLAGS.num_classes, layers=4, input_tensors=metaval_input_tensors)
 		# else:
 		# 	model_metaval = CNN2("model", n_way=FLAGS.num_classes, layers=4, input_tensors=metaval_input_tensors)
-		# WIP adaResNet
-		# model_metaval = adaResNetModel("model", n=num_classes, input_tensors=input_tensors, logdir=FLAGS.logdir + "val", is_training=model_metatrain.is_training)
-
+		
 		sess = tf.InteractiveSession()
 		tf.global_variables_initializer().run()
 		tf.train.start_queue_runners()

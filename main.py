@@ -91,7 +91,7 @@ def main(unused_args):
 		if FLAGS.datasource == "miniimagenet":
 			model_metatrain = CNN_MiniImagenet("model", n_way=FLAGS.num_classes, layers=4, input_tensors=metatrain_input_tensors)
 		elif FLAGS.datasource == "cifar":
-			model_metatrain = CNN_cifar("model", n_way=FLAGS.num_classes, layers=4, input_tensors=metatrain_input_tensors, noise=True)
+			model_metatrain = CNN_cifar("model", num_classes=FLAGS.num_classes, input_tensors=metatrain_input_tensors)
 		else:
 			model_metatrain = CNN2("model", n_way=FLAGS.num_classes, layers=4, input_tensors=metatrain_input_tensors)
 		
@@ -99,7 +99,7 @@ def main(unused_args):
 		if FLAGS.datasource == "miniimagenet":
 			model_metaval = CNN_MiniImagenet("model", n_way=FLAGS.num_classes, layers=4, input_tensors=metaval_input_tensors)
 		elif FLAGS.datasource == "cifar":
-			model_metaval = CNN_cifar("model", n_way=FLAGS.num_classes, layers=4, input_tensors=metaval_input_tensors, noise=False)
+			model_metaval = CNN_cifar("model", num_classes=FLAGS.num_classes, input_tensors=metaval_input_tensors)
 		else:
 			model_metaval = CNN2("model", n_way=FLAGS.num_classes, layers=4, input_tensors=metaval_input_tensors)
 		
@@ -118,14 +118,12 @@ def main(unused_args):
 				if step > 0 and step % FLAGS.print_every == 0:
 					# model_metatrain.writer.add_summary(metatrain_summary, step)
 					print("Step #{} - Loss : {:.3f} - PreAcc : {:.3f} - PostAcc : {:.3f}".format(step, metatrain_loss, 0, metatrain_postaccuracy))
-					train_loss.append([int(step), float(metatrain_loss)])
 				if step > 0 and (step % FLAGS.validate_every == 0 or step == (metatrain_iterations - 1)):
 					if step == (metatrain_iterations - 1):
 						print("Training complete!")
 					metaval_loss, metaval_postaccuracy = sess.run([model_metaval.loss, model_metaval.test_accuracy], {model_metaval.is_training: False})
 					# model_metaval.writer.add_summary(metaval_summary, step)
 					print("Validation Results - Loss : {:.3f} - PreAcc : {:.3f} - PostAcc : {:.3f}".format(metaval_loss, 0, metaval_postaccuracy))
-					val_loss.append([int(step), float(metaval_loss)])
 					if metaval_loss < saved_metaval_loss:
 						saved_metaval_loss = metaval_loss
 						model_metatrain.save(sess, FLAGS.savepath, global_step=step, verbose=True)
@@ -169,7 +167,7 @@ def main(unused_args):
 		if FLAGS.datasource == "miniimagenet":
 			model = CNN_MiniImagenet("model", n_way=FLAGS.num_classes, layers=4, input_tensors=input_tensors)
 		elif FLAGS.datasource == "cifar":
-			model = CNN_cifar("model", n_way=FLAGS.num_classes, layers=4, input_tensors=input_tensors, noise=False)
+			model = CNN_cifar("model", num_classes=FLAGS.num_classes, input_tensors=input_tensors)
 		else:
 			model = CNN2("model", n_way=FLAGS.num_classes, layers=4, input_tensors=input_tensors)
 
