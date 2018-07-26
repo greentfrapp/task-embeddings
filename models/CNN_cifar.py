@@ -68,7 +68,7 @@ class CNN_cifar(BaseModel):
 		self.num_classes = num_classes
 		# Attention parameters
 		self.attention_layers = 3
-		self.hidden = 128
+		self.hidden = 64
 		with tf.variable_scope(self.name, reuse=tf.AUTO_REUSE):
 			self.build_model(input_tensors)
 			variables = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, self.name)
@@ -105,7 +105,7 @@ class CNN_cifar(BaseModel):
 		train_feature_extractor = FeatureExtractor(self.train_inputs, self.is_training)
 		train_labels = tf.reshape(self.train_labels, [batchsize, -1, self.num_classes])
 		train_features = tf.reshape(train_feature_extractor.output, [batchsize, -1, 2*2*64])
-		train_features /= tf.norm(train_features, axis=-1, keep_dims=True)
+		# train_features /= tf.norm(train_features, axis=-1, keep_dims=True)
 		self.train_features = train_features
 		# Take mean of features for each class
 		output_weights = tf.matmul(train_labels, train_features, transpose_a=True) / tf.expand_dims(tf.reduce_sum(train_labels, axis=1), axis=-1)
@@ -166,18 +166,18 @@ class CNN_cifar(BaseModel):
 		test_feature_extractor = FeatureExtractor(self.test_inputs, self.is_training)
 		test_features = tf.reshape(test_feature_extractor.output, [batchsize, -1, 2*2*64])
 		
-		class_weights /= tf.norm(class_weights, axis=-1, keep_dims=True)
-		test_features /= tf.norm(test_features, axis=-1, keep_dims=True)
+		# class_weights /= tf.norm(class_weights, axis=-1, keep_dims=True)
+		# test_features /= tf.norm(test_features, axis=-1, keep_dims=True)
 
-		self.scale = tf.Variable(
-			initial_value=10.,
-			name="scale",
-			# shape=(1),
-			dtype=tf.float32,
-		)
+		# self.scale = tf.Variable(
+		# 	initial_value=10.,
+		# 	name="scale",
+		# 	# shape=(1),
+		# 	dtype=tf.float32,
+		# )
 
 		logits = tf.matmul(test_features, class_weights, transpose_b=True)
-		logits = logits * self.scale
+		# logits = logits * self.scale
 		self.logits = logits = tf.reshape(logits, [-1, self.num_classes])
 
 		# Regularize with GOR loss https://arxiv.org/abs/1708.06320
@@ -193,7 +193,10 @@ class CNN_cifar(BaseModel):
 		# moment_2 = tf.reduce_sum(moment_2) / tf.cast(n_pairs, dtype=tf.float32)
 		# loss_gor = (moment_1 ** 2) + tf.maximum(0., moment_2 - 1 / (2 * 2 * 64))
 
+		# L2 Regularization for weights
+		loss_l2 = tf.reduce_mean(tf.nn.l2_loss(class_weights))
+
 		# regularization = tf.reduce_sum([tf.nn.l2_loss(var) for var in tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, self.name + '/attention')])
 		self.loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=self.test_labels, logits=self.logits))
-		self.optimize = tf.train.AdamOptimizer(learning_rate=1e-3).minimize(self.loss)
+		self.optimize = tf.train.AdamOptimizer(learning_rate=1e-3).minimize(self.loss + 0.01 * loss_l2)
 		self.test_accuracy = tf.contrib.metrics.accuracy(labels=tf.argmax(self.test_labels, axis=1), predictions=tf.argmax(self.logits, axis=1))
