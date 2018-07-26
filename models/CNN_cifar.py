@@ -68,7 +68,7 @@ class CNN_cifar(BaseModel):
 		self.num_classes = num_classes
 		# Attention parameters
 		self.attention_layers = 3
-		self.hidden = 256
+		self.hidden = 128
 		with tf.variable_scope(self.name, reuse=tf.AUTO_REUSE):
 			self.build_model(input_tensors)
 			variables = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, self.name)
@@ -88,11 +88,25 @@ class CNN_cifar(BaseModel):
 		)
 
 		batchsize = tf.shape(input_tensors['train_inputs'])[0]
+		num_shot_train = tf.shape(input_tensors['train_inputs'])[1]
+		num_shot_test = tf.shape(input_tensors['test_inputs'])[1]
+
+		# Add noise to train_inputs
+		noise_mask = tf.random_normal(
+			shape=(batchsize*num_shot_train, 32, 32, 3),
+			mean=1.0,
+			stddev=1.0,
+			dtype=tf.float32,
+			seed=None,
+			name="noise",
+		)
 
 		# Extract training features
 		train_feature_extractor = FeatureExtractor(self.train_inputs, self.is_training)
 		train_labels = tf.reshape(self.train_labels, [batchsize, -1, self.num_classes])
 		train_features = tf.reshape(train_feature_extractor.output, [batchsize, -1, 2*2*64])
+		train_features /= tf.norm(train_features, axis=-1, keep_dims=True)
+		self.train_features = train_features
 		# Take mean of features for each class
 		output_weights = tf.matmul(train_labels, train_features, transpose_a=True) / tf.expand_dims(tf.reduce_sum(train_labels, axis=1), axis=-1)
 		
@@ -133,38 +147,51 @@ class CNN_cifar(BaseModel):
 				kernel_initializer=tf.contrib.layers.xavier_initializer(),
 			)
 
-		class_weights = tf.get_variable(
-			name="init_weights",
-			shape=(1, 5, 2*2*64),
-			dtype=tf.float32,
-			trainable=True,
-		)
-		class_weights = tf.tile(class_weights, multiples=[batchsize, 1, 1])
+		# class_weights = tf.get_variable(
+		# 	name="init_weights",
+		# 	shape=(1, 5, 2*2*64),
+		# 	dtype=tf.float32,
+		# 	trainable=True,
+		# )
+		# class_weights = tf.tile(class_weights, multiples=[batchsize, 1, 1])
 
 		# Gradient descent on training set
-		for i in np.arange(5):
-			train_logits = tf.matmul(train_features, class_weights, transpose_b=True)
-			train_loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=self.train_labels, logits=train_logits))
-			grad = tf.gradients(train_loss, class_weights)[0]
-			class_weights = class_weights - 0.01 * grad
+		# for i in np.arange(5):
+		# 	train_logits = tf.matmul(train_features, class_weights, transpose_b=True)
+		# 	train_loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=self.train_labels, logits=train_logits))
+		# 	grad = tf.gradients(train_loss, class_weights)[0]
+		# 	class_weights = class_weights - 0.01 * grad
 
 		# Extract test features
 		test_feature_extractor = FeatureExtractor(self.test_inputs, self.is_training)
 		test_features = tf.reshape(test_feature_extractor.output, [batchsize, -1, 2*2*64])
 		
-		# class_weights /= tf.norm(class_weights, axis=-1, keep_dims=True)
-		# test_features /= tf.norm(test_features, axis=-1, keep_dims=True)
+		class_weights /= tf.norm(class_weights, axis=-1, keep_dims=True)
+		test_features /= tf.norm(test_features, axis=-1, keep_dims=True)
 
-		# self.scale = tf.Variable(
-		# 	initial_value=10.,
-		# 	name="scale",
-		# 	# shape=(1),
-		# 	dtype=tf.float32,
-		# )
+		self.scale = tf.Variable(
+			initial_value=10.,
+			name="scale",
+			# shape=(1),
+			dtype=tf.float32,
+		)
 
 		logits = tf.matmul(test_features, class_weights, transpose_b=True)
-		# logits = logits * self.scale
+		logits = logits * self.scale
 		self.logits = logits = tf.reshape(logits, [-1, self.num_classes])
+
+		# Regularize with GOR loss https://arxiv.org/abs/1708.06320
+		# Use training or test samples?
+		#	Calculate 1st moment
+		# moment_1 = tf.matmul(output_weights, output_weights, transpose_b=True)
+		# moment_1 = moment_1 - tf.matrix_band_part(moment_1, -1, 0)
+		#	Calculate 2nd moment
+		# moment_2 = (moment_1 ** 2)
+		#	Regularization Loss
+		# n_pairs = self.num_classes * (self.num_classes - 1) / 2
+		# moment_1 = tf.reduce_sum(moment_1) / tf.cast(n_pairs, dtype=tf.float32)
+		# moment_2 = tf.reduce_sum(moment_2) / tf.cast(n_pairs, dtype=tf.float32)
+		# loss_gor = (moment_1 ** 2) + tf.maximum(0., moment_2 - 1 / (2 * 2 * 64))
 
 		# regularization = tf.reduce_sum([tf.nn.l2_loss(var) for var in tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, self.name + '/attention')])
 		self.loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=self.test_labels, logits=self.logits))

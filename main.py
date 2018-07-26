@@ -178,7 +178,7 @@ def main(unused_args):
 
 		# BEGIN PLOT
 		if FLAGS.plot:
-			activations, labels = sess.run([model.train_running_output, model.train_labels], {model.is_training: False})
+			activations, labels = sess.run([model.train_features, model.train_labels], {model.is_training: False})
 			activations = activations.reshape([FLAGS.num_shot_train*FLAGS.num_classes, -1])
 			from sklearn.manifold import TSNE
 			from sklearn.decomposition import PCA
