@@ -92,14 +92,14 @@ class CNN_cifar(BaseModel):
 		num_shot_test = tf.shape(input_tensors['test_inputs'])[1]
 
 		# Add noise to train_inputs
-		noise_mask = tf.random_normal(
-			shape=(batchsize*num_shot_train, 32, 32, 3),
-			mean=1.0,
-			stddev=1.0,
-			dtype=tf.float32,
-			seed=None,
-			name="noise",
-		)
+		# noise_mask = tf.random_normal(
+		# 	shape=(batchsize*num_shot_train, 32, 32, 3),
+		# 	mean=1.0,
+		# 	stddev=1.0,
+		# 	dtype=tf.float32,
+		# 	seed=None,
+		# 	name="noise",
+		# )
 
 		# Extract training features
 		train_feature_extractor = FeatureExtractor(self.train_inputs, self.is_training)

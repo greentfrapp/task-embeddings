@@ -73,6 +73,14 @@ def main(unused_args):
 			"test_labels": test_labels, # batch_size, num_classes * update_batch_size, num_classes
 		}
 
+		data_generator = DataGenerator(
+			datasource=FLAGS.datasource,
+			num_classes=16,
+			num_samples_per_class=num_shot_train+num_shot_test,
+			batch_size=FLAGS.meta_batch_size,
+			test_set=False,
+		)
+
 		# Tensorflow queue for metavalidation dataset
 		metaval_image_tensor, metaval_label_tensor = data_generator.make_data_tensor(train=False)
 		train_inputs = tf.slice(metaval_image_tensor, [0, 0, 0], [-1, FLAGS.num_classes*num_shot_train, -1])
@@ -99,7 +107,7 @@ def main(unused_args):
 		if FLAGS.datasource == "miniimagenet":
 			model_metaval = CNN_MiniImagenet("model", n_way=FLAGS.num_classes, layers=4, input_tensors=metaval_input_tensors)
 		elif FLAGS.datasource == "cifar":
-			model_metaval = CNN_cifar("model", num_classes=FLAGS.num_classes, input_tensors=metaval_input_tensors)
+			model_metaval = CNN_cifar("model", num_classes=16, input_tensors=metaval_input_tensors)
 		else:
 			model_metaval = CNN2("model", n_way=FLAGS.num_classes, layers=4, input_tensors=metaval_input_tensors)
 		
