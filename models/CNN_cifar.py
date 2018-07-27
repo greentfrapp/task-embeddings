@@ -72,7 +72,7 @@ class CNN_cifar(BaseModel):
 		with tf.variable_scope(self.name, reuse=tf.AUTO_REUSE):
 			self.build_model(input_tensors)
 			variables = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, self.name)
-			self.saver = tf.train.Saver(var_list=variables, max_to_keep=3)
+			self.saver = tf.train.Saver(var_list=variables, max_to_keep=5)
 
 	def build_model(self, input_tensors=None):
 

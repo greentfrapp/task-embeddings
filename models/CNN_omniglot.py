@@ -34,8 +34,8 @@ class FeatureExtractor(object):
 			norm = tf.contrib.layers.batch_norm(
 				inputs=conv,
 				activation_fn=tf.nn.relu,
-				# reuse=tf.AUTO_REUSE,
-				# scope="model/net/norm_{}".format(i),
+				reuse=tf.AUTO_REUSE,
+				scope="model/net/norm_{}".format(i),
 				# is_training=self.is_training, # should be True for both metatrain and metatest
 			)
 			maxpool = tf.layers.max_pooling2d(
@@ -45,7 +45,7 @@ class FeatureExtractor(object):
 				padding="valid",
 			)
 			running_output = maxpool
-		self.output = running_output
+		self.output = running_output # shape = (meta_batch_size*num_shot_train, 1, 1, 64)
 
 
 class CNN_omniglot(object):
@@ -58,11 +58,11 @@ class CNN_omniglot(object):
 		self.attention_layers = 3
 		self.hidden = 64
 		with tf.variable_scope(self.name, reuse=tf.AUTO_REUSE):
-			self.build_model(layers, input_tensors)
+			self.build_model(input_tensors)
 			variables = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, self.name)
 			self.saver = tf.train.Saver(var_list=variables, max_to_keep=3)
 
-	def build_model(self, layers=3, input_tensors=None):
+	def build_model(self, input_tensors=None):
 
 		self.train_inputs = tf.reshape(input_tensors['train_inputs'], [-1, 28, 28, 1])
 		self.test_inputs = tf.reshape(input_tensors['test_inputs'], [-1, 28, 28, 1])
@@ -81,6 +81,8 @@ class CNN_omniglot(object):
 		train_feature_extractor = FeatureExtractor(self.train_inputs, self.is_training)
 		train_labels = tf.reshape(self.train_labels, [batchsize, -1, self.num_classes])
 		train_features = tf.reshape(train_feature_extractor.output, [batchsize, -1, 64])
+		# train_features /= tf.norm(train_features, axis=-1, keep_dims=True)
+		self.train_features = train_features
 		# Take mean of features for each class
 		output_weights = tf.matmul(train_labels, output_weights, transpose_a=True) / tf.expand_dims(tf.reduce_sum(train_labels, axis=1), axis=-1)
 		
@@ -92,7 +94,6 @@ class CNN_omniglot(object):
 				activation=None,
 				name="train_embed",
 			)
-			
 			for i in np.arange(self.attention_layers):
 				train_embed, _ = self.attention(
 					query=train_embed,
