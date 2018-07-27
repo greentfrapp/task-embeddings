@@ -11,6 +11,15 @@ def save_config(hparams, folder, filename=None):
 	with open(folder + filename, 'w') as file:
 		json.dump(hparams, file)
 
+def load_config(filename, test=False, notes=None):
+	with open(filename, 'r') as file:
+		hparams = json.load(file)
+	if test:
+		hparams['mode'] = 'test'
+		hparams['notes'] = notes
+	else:
+		return hparams
+
 def check_default_config(hparams):
 	datasource = hparams['datasource']
 	if datasource not in DEFAULT_CONFIGS:
@@ -22,7 +31,6 @@ def check_default_config(hparams):
 		# Check for values exceeding max
 		if param_id in NUMERICAL_PARAMS:
 			if hparams[param_id] > max_config[param_id]:
-				print(param_id)
 				print('Parameter {} exceeded maximum value of {}, clipping to maximum value...'.format(param_id, max_config[param_id]))
 				hparams[param_id] = max_config[param_id]
 	return hparams

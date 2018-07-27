@@ -7,6 +7,7 @@ except:
 from time import strftime
 import os
 import json
+from comet_ml import Experiment
 import tensorflow as tf
 import numpy as np
 import matplotlib.pyplot as plt
@@ -15,7 +16,7 @@ from absl import app
 
 from models import CNN, CNN2, CNN_MiniImagenet, FFN, ResNet, CNN_cifar
 from data_generator import DataGenerator
-from config import check_default_config, save_config
+from config import check_default_config, save_config, load_config
 
 
 FLAGS = flags.FLAGS
@@ -25,6 +26,7 @@ flags.DEFINE_bool('train', False, 'Train')
 flags.DEFINE_bool('test', False, 'Test')
 flags.DEFINE_bool('load', False, 'Resume training from a saved model')
 flags.DEFINE_bool('plot', False, 'Plot activations of training samples')
+flags.DEFINE_bool('comet', False, 'Use comet.ml for logging')
 
 # Task parameters
 flags.DEFINE_string('datasource', 'omniglot', 'omniglot or sinusoid (miniimagenet WIP)')
@@ -47,7 +49,7 @@ flags.DEFINE_integer('num_classes_test', None, 'Number of classes per test task,
 flags.DEFINE_integer('print_every', 100, 'Frequency for printing training loss and accuracy')
 
 # Misc.
-flags.DEFINE_string('notes', '', 'Additional notes')
+flags.DEFINE_string('notes', None, 'Additional notes')
 
 def main(unused_args):
 
@@ -77,7 +79,11 @@ def main(unused_args):
 		hparams['savepath'] = FLAGS.savepath + save_folder
 		save_config(hparams, FLAGS.savepath + save_folder)
 	elif FLAGS.test:
-		hparams['mode'] = 'test'
+		hparams = load_config(FLAGS.savepath + 'config.json', test=True, notes=FLAGS.notes)
+
+	if FLAGS.comet:
+		experiment = Experiment(api_key=os.environ['COMETML_API_KEY'], project_name='meta')
+		experiment.log_multiple_params(hparams)
 
 	if FLAGS.train and FLAGS.datasource in ['omniglot', 'miniimagenet', 'cifar']:
 
@@ -109,18 +115,18 @@ def main(unused_args):
 
 		data_generator = DataGenerator(
 			datasource=FLAGS.datasource,
-			num_classes=16,
+			num_classes=hparams['num_classes_val'],
 			num_samples_per_class=num_shot_train+num_shot_test,
-			batch_size=FLAGS.meta_batch_size,
+			batch_size=16,
 			test_set=False,
 		)
 
 		# Tensorflow queue for metavalidation dataset
 		metaval_image_tensor, metaval_label_tensor = data_generator.make_data_tensor(train=False)
-		train_inputs = tf.slice(metaval_image_tensor, [0, 0, 0], [-1, FLAGS.num_classes*num_shot_train, -1])
-		test_inputs = tf.slice(metaval_image_tensor, [0, FLAGS.num_classes*num_shot_train, 0], [-1, -1, -1])
-		train_labels = tf.slice(metaval_label_tensor, [0, 0, 0], [-1, FLAGS.num_classes*num_shot_train, -1])
-		test_labels = tf.slice(metaval_label_tensor, [0, FLAGS.num_classes*num_shot_train, 0], [-1, -1, -1])
+		train_inputs = tf.slice(metaval_image_tensor, [0, 0, 0], [-1, hparams['num_classes_val']*num_shot_train, -1])
+		test_inputs = tf.slice(metaval_image_tensor, [0, hparams['num_classes_val']*num_shot_train, 0], [-1, -1, -1])
+		train_labels = tf.slice(metaval_label_tensor, [0, 0, 0], [-1, hparams['num_classes_val']*num_shot_train, -1])
+		test_labels = tf.slice(metaval_label_tensor, [0, hparams['num_classes_val']*num_shot_train, 0], [-1, -1, -1])
 		metaval_input_tensors = {
 			'train_inputs': train_inputs, # batch_size, num_classes * (num_samples_per_class - update_batch_size), 28 * 28
 			'train_labels': train_labels, # batch_size, num_classes * (num_samples_per_class - update_batch_size), num_classes
@@ -156,16 +162,22 @@ def main(unused_args):
 		steps = FLAGS.steps or 40000
 		try:
 			for step in np.arange(steps):
-				metatrain_loss, metatrain_postaccuracy, _ = sess.run([model_metatrain.loss, model_metatrain.test_accuracy, model_metatrain.optimize], {model_metatrain.is_training: True})
+				metatrain_loss, metatrain_accuracy, _ = sess.run([model_metatrain.loss, model_metatrain.test_accuracy, model_metatrain.optimize], {model_metatrain.is_training: True})
 				if step > 0 and step % FLAGS.print_every == 0:
 					# model_metatrain.writer.add_summary(metatrain_summary, step)
-					print('Step #{} - Loss : {:.3f} - PreAcc : {:.3f} - PostAcc : {:.3f}'.format(step, metatrain_loss, 0, metatrain_postaccuracy))
+					print('Step #{} - Loss : {:.3f} - Acc : {:.3f}'.format(step, metatrain_loss, metatrain_accuracy))
+					if FLAGS.comet:
+						experiment.log_metric("train_loss", metatrain_loss, step=step)
+						experiment.log_metric("train_accuracy", metatrain_accuracy, step=step)
 				if step > 0 and (step % FLAGS.validate_every == 0 or step == (steps - 1)):
 					if step == (steps - 1):
 						print('Training complete!')
-					metaval_loss, metaval_postaccuracy = sess.run([model_metaval.loss, model_metaval.test_accuracy], {model_metaval.is_training: False})
+					metaval_loss, metaval_accuracy = sess.run([model_metaval.loss, model_metaval.test_accuracy], {model_metaval.is_training: False})
 					# model_metaval.writer.add_summary(metaval_summary, step)
-					print('Validation Results - Loss : {:.3f} - PreAcc : {:.3f} - PostAcc : {:.3f}'.format(metaval_loss, 0, metaval_postaccuracy))
+					print('Validation Results - Loss : {:.3f} - Acc : {:.3f}'.format(metaval_loss, metaval_accuracy))
+					if FLAGS.comet:
+						experiment.log_metric("val_loss", metaval_loss, step=step)
+						experiment.log_metric("val_accuracy", metaval_accuracy, step=step)
 					if metaval_loss < saved_metaval_loss:
 						saved_metaval_loss = metaval_loss
 						model_metatrain.save(sess, FLAGS.savepath + save_folder, global_step=step, verbose=True)
