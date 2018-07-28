@@ -14,7 +14,7 @@ import matplotlib.pyplot as plt
 from absl import flags
 from absl import app
 
-from models import CNN, CNN2, CNN_MiniImagenet, FFN, ResNet, CNN_cifar
+from models import CNN, CNN2, CNN_miniimagenet, FFN, ResNet, CNN_cifar
 from data_generator import DataGenerator
 from config import check_default_config, save_config, load_config
 
@@ -37,7 +37,7 @@ flags.DEFINE_integer('num_shot_test', None, 'Number of test samples per class pe
 # Training parameters
 flags.DEFINE_integer('steps', None, 'Number of metatraining iterations')
 flags.DEFINE_integer('meta_batch_size', 32, 'Batchsize for metatraining')
-flags.DEFINE_float('meta_lr', 0.0003, 'Meta learning rate')
+flags.DEFINE_float('meta_lr', 0.001, 'Meta learning rate')
 flags.DEFINE_integer('validate_every', 500, 'Frequency for metavalidation and saving')
 flags.DEFINE_string('savepath', 'saved_models/', 'Path to save or load models')
 flags.DEFINE_string('logdir', 'logs/', 'Path to save Tensorboard summaries')
@@ -137,7 +137,8 @@ def main(unused_args):
 		# Graph for metatraining
 		# using scope reuse=tf.AUTO_REUSE, not sure if this is the best way to do it
 		if FLAGS.datasource == 'miniimagenet':
-			model_metatrain = CNN_MiniImagenet('model', n_way=FLAGS.num_classes, layers=4, input_tensors=metatrain_input_tensors)
+			# model_metatrain = CNN_MiniImagenet('model', n_way=FLAGS.num_classes, layers=4, input_tensors=metatrain_input_tensors)
+			model_metatrain = CNN_miniimagenet('model', num_classes=FLAGS.num_classes, input_tensors=metatrain_input_tensors)
 		elif FLAGS.datasource == 'cifar':
 			model_metatrain = CNN_cifar('model', num_classes=FLAGS.num_classes, input_tensors=metatrain_input_tensors)
 		else:
@@ -145,7 +146,8 @@ def main(unused_args):
 		
 		# Graph for metavalidation
 		if FLAGS.datasource == 'miniimagenet':
-			model_metaval = CNN_MiniImagenet('model', n_way=FLAGS.num_classes, layers=4, input_tensors=metaval_input_tensors)
+			# model_metaval = CNN_MiniImagenet('model', n_way=FLAGS.num_classes, layers=4, input_tensors=metaval_input_tensors)
+			model_metaval = CNN_miniimagenet('model', num_classes=16, input_tensors=metaval_input_tensors)
 		elif FLAGS.datasource == 'cifar':
 			model_metaval = CNN_cifar('model', num_classes=16, input_tensors=metaval_input_tensors)
 		else:
@@ -219,7 +221,8 @@ def main(unused_args):
 		}
 
 		if FLAGS.datasource == 'miniimagenet':
-			model = CNN_MiniImagenet('model', n_way=FLAGS.num_classes, layers=4, input_tensors=input_tensors)
+			# model = CNN_MiniImagenet('model', n_way=FLAGS.num_classes, layers=4, input_tensors=input_tensors)
+			model = CNN_miniimagenet('model', num_classes=FLAGS.num_classes, input_tensors=input_tensors)
 		elif FLAGS.datasource == 'cifar':
 			model = CNN_cifar('model', num_classes=FLAGS.num_classes, input_tensors=input_tensors)
 		else:
@@ -266,6 +269,11 @@ def main(unused_args):
 		print('Accuracy                : {:.4f}'.format(avg))
 		print('StdDev                  : {:.4f}'.format(stdev))
 		print('95% Confidence Interval : {:.4f}'.format(ci95))
+
+		if FLAGS.comet:
+			experiment.log_metric("test_accuracy_mean", avg)
+			experiment.log_metric("test_accuracy_stdev", stdev)
+			experiment.log_metric("test_accuracy_ci95", ci95)
 
 	if FLAGS.train and FLAGS.datasource in ['sinusoid', 'multimodal']:
 

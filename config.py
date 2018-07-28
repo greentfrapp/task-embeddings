@@ -17,8 +17,7 @@ def load_config(filename, test=False, notes=None):
 	if test:
 		hparams['mode'] = 'test'
 		hparams['notes'] = notes
-	else:
-		return hparams
+	return hparams
 
 def check_default_config(hparams):
 	datasource = hparams['datasource']
@@ -63,7 +62,33 @@ DEFAULT_CONFIGS['cifar'] = {
 	'meta_lr': 1e-3,
 	'notes': None,
 }
+DEFAULT_CONFIGS['miniimagenet'] = {
+	'mode': None,
+	'datasource': 'cifar',
+	'num_classes_train': 5,
+	'num_classes_val': 5,
+	'num_classes_test': 5,
+	'num_shot_train': 1,
+	'num_shot_test': 1,
+	'steps': 60000,
+	'meta_batch_size': 4,
+	'meta_lr': 1e-3,
+	'notes': None,
+}
 MAX_CONFIGS['cifar'] = {
+	'mode': None,
+	'datasource': 'cifar',
+	'num_classes_train': 64,
+	'num_classes_val': 16,
+	'num_classes_test': 20,
+	'num_shot_train': 599,
+	'num_shot_test': 599,
+	'steps': np.inf,
+	'meta_batch_size': 200000,
+	'meta_lr': np.inf,
+	'notes': None,
+}
+MAX_CONFIGS['miniimagenet'] = {
 	'mode': None,
 	'datasource': 'cifar',
 	'num_classes_train': 64,
