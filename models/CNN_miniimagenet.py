@@ -13,8 +13,8 @@ class FeatureExtractor(object):
 	def __init__(self, inputs, is_training):
 		self.inputs = inputs
 		self.is_training = is_training
-		self.n_filters = [32, 32, 32, 32, 32]
-		self.dropout_rate = [None, None, None, 0.1, 0.3]
+		self.n_filters = [32, 32, 32, 32]
+		self.dropout_rate = [None, None, 0.1, 0.3]
 		with tf.variable_scope("extractor", reuse=tf.AUTO_REUSE):
 			self.build_model()
 
@@ -102,7 +102,7 @@ class CNN_miniimagenet(BaseModel):
 		# Extract training features
 		train_feature_extractor = FeatureExtractor(self.train_inputs, self.is_training)
 		train_labels = tf.reshape(self.train_labels, [batchsize, -1, self.num_classes])
-		train_features = tf.reshape(train_feature_extractor.output, [batchsize, -1, 2*2*32])
+		train_features = tf.reshape(train_feature_extractor.output, [batchsize, -1, 5*5*32])
 		# train_features /= tf.norm(train_features, axis=-1, keep_dims=True)
 		self.train_features = train_features
 		# Take mean of features for each class
@@ -140,7 +140,7 @@ class CNN_miniimagenet(BaseModel):
 
 			class_weights = tf.layers.dense(
 				inputs=train_embed,
-				units=2*2*32,
+				units=5*5*32,
 				activation=None,
 				kernel_initializer=tf.contrib.layers.xavier_initializer(),
 			)
@@ -162,7 +162,7 @@ class CNN_miniimagenet(BaseModel):
 
 		# Extract test features
 		test_feature_extractor = FeatureExtractor(self.test_inputs, self.is_training)
-		test_features = tf.reshape(test_feature_extractor.output, [batchsize, -1, 2*2*32])
+		test_features = tf.reshape(test_feature_extractor.output, [batchsize, -1, 5*5*32])
 		
 		# class_weights /= tf.norm(class_weights, axis=-1, keep_dims=True)
 		# test_features /= tf.norm(test_features, axis=-1, keep_dims=True)
@@ -196,5 +196,5 @@ class CNN_miniimagenet(BaseModel):
 
 		# regularization = tf.reduce_sum([tf.nn.l2_loss(var) for var in tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, self.name + '/attention')])
 		self.loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=self.test_labels, logits=self.logits))
-		self.optimize = tf.train.AdamOptimizer(learning_rate=1e-3).minimize(self.loss + 1e-3 * loss_l2)
+		self.optimize = tf.train.AdamOptimizer(learning_rate=1e-3).minimize(self.loss + 1e-1 * loss_l2)
 		self.test_accuracy = tf.contrib.metrics.accuracy(labels=tf.argmax(self.test_labels, axis=1), predictions=tf.argmax(self.logits, axis=1))
