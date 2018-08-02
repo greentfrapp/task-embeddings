@@ -49,6 +49,19 @@ DEFAULT_CONFIGS = {}
 MAX_CONFIGS = {}
 
 # CIFAR
+DEFAULT_CONFIGS['omniglot'] = {
+	'mode': None,
+	'datasource': 'omniglot',
+	'num_classes_train': 5,
+	'num_classes_val': 5,
+	'num_classes_test': 5,
+	'num_shot_train': 1,
+	'num_shot_test': 1,
+	'steps': 40000,
+	'meta_batch_size': 32,
+	'meta_lr': 3e-4,
+	'notes': None,
+}
 DEFAULT_CONFIGS['cifar'] = {
 	'mode': None,
 	'datasource': 'cifar',
@@ -73,6 +86,19 @@ DEFAULT_CONFIGS['miniimagenet'] = {
 	'steps': 60000,
 	'meta_batch_size': 4,
 	'meta_lr': 1e-3,
+	'notes': None,
+}
+MAX_CONFIGS['omniglot'] = {
+	'mode': None,
+	'datasource': 'omniglot',
+	'num_classes_train': 1100,
+	'num_classes_val': 100,
+	'num_classes_test': 423,
+	'num_shot_train': 599,
+	'num_shot_test': 599,
+	'steps': np.inf,
+	'meta_batch_size': 200000,
+	'meta_lr': np.inf,
 	'notes': None,
 }
 MAX_CONFIGS['cifar'] = {

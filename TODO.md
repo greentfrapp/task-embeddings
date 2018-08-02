@@ -22,8 +22,9 @@
 
 # Results
 
-- [ ] Plot training and validation curves for multimodal, sinuosoid and omniglot with and without attention
+- [x] Plot training and validation curves for multimodal, sinuosoid and omniglot with and without attention
 - [x] Visualize tSNE for omniglot activations
+- [ ] Experiment with cosine similarity for miniImageNet
 - [ ] Experimental parameters on CIFAR - pretraining - None, 100 steps, 500, 1000, 2000
 - [ ] Experimental parameters on CIFAR - attention layers - 1, 2, 3, 4, 5
 - [ ] Experimental parameters on CIFAR - hidden dim - 64, 128, 256

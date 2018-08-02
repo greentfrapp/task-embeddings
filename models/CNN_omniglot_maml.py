@@ -84,44 +84,15 @@ class CNN_omniglot(BaseModel):
 		# train_features /= tf.norm(train_features, axis=-1, keep_dims=True)
 		self.train_features = train_features
 		# Take mean of features for each class
-		output_weights = tf.matmul(train_labels, train_features, transpose_a=True) / tf.expand_dims(tf.reduce_sum(train_labels, axis=1), axis=-1)
+		class_weights = tf.matmul(train_labels, train_features, transpose_a=True) / tf.expand_dims(tf.reduce_sum(train_labels, axis=1), axis=-1)
 		
-		# Calculate class weights with attention
-		with tf.variable_scope("attention"):
-			train_embed = tf.layers.dense(
-				inputs=output_weights,
-				units=self.hidden,
-				activation=None,
-				name="train_embed",
-			)
-			for i in np.arange(self.attention_layers):
-				train_embed, _ = self.attention(
-					query=train_embed,
-					key=train_embed,
-					value=train_embed,
-				)
-				dense = tf.layers.dense(
-					inputs=train_embed,
-					units=self.hidden * 2,
-					activation=tf.nn.relu,
-					kernel_initializer=tf.contrib.layers.xavier_initializer(),
-					name="encoder_layer{}_dense1".format(i + 1)
-				)
-				train_embed += tf.layers.dense(
-					inputs=dense,
-					units=self.hidden,
-					activation=None,
-					kernel_initializer=tf.contrib.layers.xavier_initializer(),
-					name="encoder_layer{}_dense2".format(i + 1)
-				)
-				train_embed = tf.contrib.layers.layer_norm(train_embed, begin_norm_axis=2)
-
-			class_weights = tf.layers.dense(
-				inputs=train_embed,
-				units=64,
-				activation=None,
-				kernel_initializer=tf.contrib.layers.xavier_initializer(),
-			)
+		# Gradient Descent on Training Set
+		for i in range(5):
+			train_logits = tf.matmul(train_features, class_weights, transpose_b=True)
+			train_logits = tf.reshape(train_logits, [-1, self.num_classes])
+			train_loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=self.train_labels, logits=train_logits))
+			gradient = tf.gradients(train_loss, class_weights)
+			class_weights = class_weights - 0.01 * gradient[0]
 
 		# Extract test features
 		test_feature_extractor = FeatureExtractor(self.test_inputs, self.is_training)
@@ -143,5 +114,5 @@ class CNN_omniglot(BaseModel):
 
 		# regularization = tf.reduce_sum([tf.nn.l2_loss(var) for var in tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, self.name + '/attention')])
 		self.loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=self.test_labels, logits=self.logits))
-		self.optimize = tf.train.AdamOptimizer(learning_rate=3e-4).minimize(self.loss)
+		self.optimize = tf.train.AdamOptimizer(learning_rate=1e-3).minimize(self.loss)
 		self.test_accuracy = tf.contrib.metrics.accuracy(labels=tf.argmax(self.test_labels, axis=1), predictions=tf.argmax(self.logits, axis=1))

@@ -1,5 +1,5 @@
 """
-Architecture for Few-Shot CIFAR
+Architecture for Few-Shot Omniglot
 """
 
 import tensorflow as tf
@@ -13,8 +13,7 @@ class FeatureExtractor(object):
 	def __init__(self, inputs, is_training):
 		self.inputs = inputs
 		self.is_training = is_training
-		self.n_filters = [32, 32, 32, 32]
-		self.dropout_rate = [None, None, 0.1, 0.3]
+		self.n_filters = [64, 64, 64, 64]
 		with tf.variable_scope("extractor", reuse=tf.AUTO_REUSE):
 			self.build_model()
 
@@ -34,9 +33,9 @@ class FeatureExtractor(object):
 			)
 			norm = tf.contrib.layers.batch_norm(
 				inputs=conv,
-				activation_fn=None,
+				activation_fn=tf.nn.relu,
 				reuse=tf.AUTO_REUSE,
-				scope="model/extractor/norm_{}".format(i),
+				scope="model/net/norm_{}".format(i),
 				# is_training=self.is_training, # should be True for both metatrain and metatest
 			)
 			maxpool = tf.layers.max_pooling2d(
@@ -45,50 +44,47 @@ class FeatureExtractor(object):
 				strides=(2, 2),
 				padding="valid",
 			)
-			if i == len(self.n_filters) - 1:
-				relu = maxpool
-			else:
-				relu = tf.nn.leaky_relu(
-					features=maxpool,
-					alpha=0.1,
-				)
-			if self.dropout_rate[i] is None:
-				dropout = relu
-			else:
-				dropout = tf.layers.dropout(
-					inputs=relu,
-					rate=self.dropout_rate[i],
-					training=self.is_training,
-				)
-			running_output = dropout
+			running_output = maxpool
+		self.output = running_output # shape = (meta_batch_size*num_shot_train, 1, 1, 64)
 
-		# running_output = tf.layers.max_pooling2d(
-		# 	inputs=running_output,
-		# 	pool_size=(3, 3),
-		# 	strides=(3, 3),
-		# 	padding='valid',
-		# )
+class Decoder(object):
 
-		self.output = running_output # shape = (meta_batch_size*num_shot_train, 5, 5, 64)
+	def __init__(self, inputs):
+		self.inputs = inputs
+		self.n_units = [1000, 1000, 1000, 784]
+		with tf.variable_scope("decoder", reuse=tf.AUTO_REUSE):
+			self.build_model()
 
-class CNN_miniimagenet(BaseModel):
+	def build_model(self):
+		running_output = self.inputs
+		for i, units in enumerate(self.n_units):
+			running_output = tf.layers.dense(
+				inputs=running_output,
+				units=units,
+				name='dense_{}'.format(i),
+			)
+		running_output = tf.reshape(running_output, [-1, 28, 28, 1])
+		self.output = running_output # shape = (meta_batch_size*num_shot_train, 1, 1, 64)
 
-	def __init__(self, name, num_classes, input_tensors=None):
-		super(CNN_miniimagenet, self).__init__()
+
+class CNN_omniglot(BaseModel):
+
+	def __init__(self, name, num_classes=5, input_tensors=None):
+		super(CNN_omniglot, self).__init__()
 		self.name = name
 		self.num_classes = num_classes
 		# Attention parameters
-		self.attention_layers = 5
-		self.hidden = 256
+		self.attention_layers = 3
+		self.hidden = 64
 		with tf.variable_scope(self.name, reuse=tf.AUTO_REUSE):
 			self.build_model(input_tensors)
 			variables = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, self.name)
-			self.saver = tf.train.Saver(var_list=variables, max_to_keep=5)
+			self.saver = tf.train.Saver(var_list=variables, max_to_keep=3)
 
 	def build_model(self, input_tensors=None):
 
-		self.train_inputs = tf.reshape(input_tensors['train_inputs'], [-1, 84, 84, 3])
-		self.test_inputs = tf.reshape(input_tensors['test_inputs'], [-1, 84, 84, 3])
+		self.train_inputs = tf.reshape(input_tensors['train_inputs'], [-1, 28, 28, 1])
+		self.test_inputs = tf.reshape(input_tensors['test_inputs'], [-1, 28, 28, 1])
 		self.train_labels = tf.reshape(input_tensors['train_labels'], [-1, self.num_classes])
 		self.test_labels = tf.reshape(input_tensors['test_labels'], [-1, self.num_classes])
 
@@ -99,15 +95,20 @@ class CNN_miniimagenet(BaseModel):
 		)
 
 		batchsize = tf.shape(input_tensors['train_inputs'])[0]
-		num_shot_train = tf.shape(input_tensors['train_inputs'])[1]
-		num_shot_test = tf.shape(input_tensors['test_inputs'])[1]
 
 		# Extract training features
 		train_feature_extractor = FeatureExtractor(self.train_inputs, self.is_training)
-		train_labels = tf.reshape(self.train_labels, [batchsize, -1, self.num_classes])
-		train_features = tf.reshape(train_feature_extractor.output, [batchsize, -1, 5*5*32])
-		# train_features = tf.nn.l2_normalize(train_features, dim=-1)
+		train_features = tf.reshape(train_feature_extractor.output, [batchsize, -1, 64])
+
+		# Autoencoder
+		decoder = Decoder(tf.reshape(train_features, [-1, 64]))
+		reconstruction = decoder.output
+		ae_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, self.name + '/extractor') + tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, self.name + '/decoder')
+		ae_loss = tf.reduce_mean(tf.losses.mean_squared_error(labels=self.train_inputs, predictions=decoder.output))
+		self.ae_optimize = tf.train.AdamOptimizer(learning_rate=3e-4).minimize(ae_loss, var_list=ae_vars)
+
 		# train_features /= tf.norm(train_features, axis=-1, keep_dims=True)
+		train_labels = tf.reshape(self.train_labels, [batchsize, -1, self.num_classes])
 		self.train_features = train_features
 		# Take mean of features for each class
 		output_weights = tf.matmul(train_labels, train_features, transpose_a=True) / tf.expand_dims(tf.reduce_sum(train_labels, axis=1), axis=-1)
@@ -131,76 +132,44 @@ class CNN_miniimagenet(BaseModel):
 					units=self.hidden * 2,
 					activation=tf.nn.relu,
 					kernel_initializer=tf.contrib.layers.xavier_initializer(),
-					name="attention_layer{}_dense0".format(i),
+					name="encoder_layer{}_dense1".format(i + 1)
 				)
 				train_embed += tf.layers.dense(
 					inputs=dense,
 					units=self.hidden,
 					activation=None,
 					kernel_initializer=tf.contrib.layers.xavier_initializer(),
-					name="attention_layer{}_dense1".format(i)
+					name="encoder_layer{}_dense2".format(i + 1)
 				)
 				train_embed = tf.contrib.layers.layer_norm(train_embed, begin_norm_axis=2)
 
 			class_weights = tf.layers.dense(
 				inputs=train_embed,
-				units=5*5*32,
+				units=64,
 				activation=None,
 				kernel_initializer=tf.contrib.layers.xavier_initializer(),
 			)
 
-		# class_weights = tf.get_variable(
-		# 	name="init_weights",
-		# 	shape=(1, 5, 2*2*64),
-		# 	dtype=tf.float32,
-		# 	trainable=True,
-		# )
-		# class_weights = tf.tile(class_weights, multiples=[batchsize, 1, 1])
-
-		# Gradient descent on training set
-		# for i in np.arange(5):
-		# 	train_logits = tf.matmul(train_features, class_weights, transpose_b=True)
-		# 	train_loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=self.train_labels, logits=train_logits))
-		# 	grad = tf.gradients(train_loss, class_weights)[0]
-		# 	class_weights = class_weights - 0.01 * grad
-
 		# Extract test features
 		test_feature_extractor = FeatureExtractor(self.test_inputs, self.is_training)
-		test_features = tf.reshape(test_feature_extractor.output, [batchsize, -1, 5*5*32])
+		test_features = tf.reshape(test_feature_extractor.output, [batchsize, -1, 64])
 		
 		# class_weights /= tf.norm(class_weights, axis=-1, keep_dims=True)
-		class_weights = tf.nn.l2_normalize(class_weights, dim=-1)
 		# test_features /= tf.norm(test_features, axis=-1, keep_dims=True)
-		test_features = tf.nn.l2_normalize(test_features, dim=-1)
 
-		self.scale = tf.Variable(
-			initial_value=10.,
-			name="scale",
-			# shape=(1),
-			dtype=tf.float32,
-		)
+		# self.scale = tf.Variable(
+		# 	initial_value=10.,
+		# 	name="scale",
+		# 	# shape=(1),
+		# 	dtype=tf.float32,
+		# )
 
 		logits = tf.matmul(test_features, class_weights, transpose_b=True)
-		logits = logits * self.scale
+		# logits = logits * self.scale
 		self.logits = logits = tf.reshape(logits, [-1, self.num_classes])
-
-		# Regularize with GOR loss https://arxiv.org/abs/1708.06320
-		# Use training or test samples?
-		#	Calculate 1st moment
-		# moment_1 = tf.matmul(output_weights, output_weights, transpose_b=True)
-		# moment_1 = moment_1 - tf.matrix_band_part(moment_1, -1, 0)
-		#	Calculate 2nd moment
-		# moment_2 = (moment_1 ** 2)
-		#	Regularization Loss
-		# n_pairs = self.num_classes * (self.num_classes - 1) / 2
-		# moment_1 = tf.reduce_sum(moment_1) / tf.cast(n_pairs, dtype=tf.float32)
-		# moment_2 = tf.reduce_sum(moment_2) / tf.cast(n_pairs, dtype=tf.float32)
-		# loss_gor = (moment_1 ** 2) + tf.maximum(0., moment_2 - 1 / (2 * 2 * 64))
-
-		# L2 Regularization for weights
-		# loss_l2 = tf.reduce_mean(tf.nn.l2_loss(class_weights))
 
 		# regularization = tf.reduce_sum([tf.nn.l2_loss(var) for var in tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, self.name + '/attention')])
 		self.loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=self.test_labels, logits=self.logits))
-		self.optimize = tf.train.AdamOptimizer(learning_rate=1e-4).minimize(self.loss)
+		att_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, self.name + '/attention')
+		self.optimize = tf.train.AdamOptimizer(learning_rate=3e-4).minimize(self.loss, var_list=att_vars)
 		self.test_accuracy = tf.contrib.metrics.accuracy(labels=tf.argmax(self.test_labels, axis=1), predictions=tf.argmax(self.logits, axis=1))

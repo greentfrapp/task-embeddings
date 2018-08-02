@@ -14,7 +14,7 @@ import matplotlib.pyplot as plt
 from absl import flags
 from absl import app
 
-from models import CNN, CNN2, CNN_miniimagenet, FFN, ResNet, CNN_cifar
+from models import CNN, CNN2, CNN_miniimagenet, FFN, ResNet, CNN_cifar, CNN_omniglot
 from data_generator import DataGenerator
 from config import check_default_config, save_config, load_config
 
@@ -142,16 +142,18 @@ def main(unused_args):
 		elif FLAGS.datasource == 'cifar':
 			model_metatrain = CNN_cifar('model', num_classes=FLAGS.num_classes, input_tensors=metatrain_input_tensors)
 		else:
-			model_metatrain = CNN2('model', n_way=FLAGS.num_classes, layers=4, input_tensors=metatrain_input_tensors)
+			model_metatrain = CNN_omniglot('model', num_classes=FLAGS.num_classes, input_tensors=metatrain_input_tensors)
+			# model_metatrain = CNN2('model', n_way=FLAGS.num_classes, layers=4, input_tensors=metatrain_input_tensors)
 		
 		# Graph for metavalidation
 		if FLAGS.datasource == 'miniimagenet':
 			# model_metaval = CNN_MiniImagenet('model', n_way=FLAGS.num_classes, layers=4, input_tensors=metaval_input_tensors)
 			model_metaval = CNN_miniimagenet('model', num_classes=16, input_tensors=metaval_input_tensors)
 		elif FLAGS.datasource == 'cifar':
-			model_metaval = CNN_cifar('model', num_classes=16, input_tensors=metaval_input_tensors)
+			model_metaval = CNN_cifar('model', num_classes=FLAGS.num_classes, input_tensors=metaval_input_tensors)
 		else:
-			model_metaval = CNN2('model', n_way=FLAGS.num_classes, layers=4, input_tensors=metaval_input_tensors)
+			model_metaval = CNN_omniglot('model', num_classes=FLAGS.num_classes, input_tensors=metaval_input_tensors)
+			# model_metaval = CNN2('model', n_way=FLAGS.num_classes, layers=4, input_tensors=metaval_input_tensors)
 
 		sess = tf.InteractiveSession()
 		tf.global_variables_initializer().run()
@@ -164,6 +166,7 @@ def main(unused_args):
 		steps = FLAGS.steps or 40000
 		try:
 			for step in np.arange(steps):
+				# metatrain_loss, metatrain_accuracy, _, _ = sess.run([model_metatrain.loss, model_metatrain.test_accuracy, model_metatrain.optimize, model_metatrain.ae_optimize], {model_metatrain.is_training: True})
 				metatrain_loss, metatrain_accuracy, _ = sess.run([model_metatrain.loss, model_metatrain.test_accuracy, model_metatrain.optimize], {model_metatrain.is_training: True})
 				if step > 0 and step % FLAGS.print_every == 0:
 					# model_metatrain.writer.add_summary(metatrain_summary, step)
@@ -226,7 +229,8 @@ def main(unused_args):
 		elif FLAGS.datasource == 'cifar':
 			model = CNN_cifar('model', num_classes=FLAGS.num_classes, input_tensors=input_tensors)
 		else:
-			model = CNN2('model', n_way=FLAGS.num_classes, layers=4, input_tensors=input_tensors)
+			model = CNN_omniglot('model', num_classes=FLAGS.num_classes, input_tensors=input_tensors)
+			# model = CNN2('model', n_way=FLAGS.num_classes, layers=4, input_tensors=input_tensors)
 
 		sess = tf.InteractiveSession()
 		tf.global_variables_initializer().run()
@@ -236,7 +240,7 @@ def main(unused_args):
 		# BEGIN PLOT
 		if FLAGS.plot:
 			activations, labels = sess.run([model.train_features, model.train_labels], {model.is_training: False})
-			activations = activations.reshape([FLAGS.num_shot_train*FLAGS.num_classes, -1])
+			activations = activations.reshape([num_shot_train*FLAGS.num_classes, -1])
 			from sklearn.manifold import TSNE
 			from sklearn.decomposition import PCA
 			pca = PCA(50)

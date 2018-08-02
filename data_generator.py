@@ -123,14 +123,14 @@ class DataGenerator(object):
             # !!
             # temporarily reduce num_total_batches
             # num_total_batches = 40000
-            # num_total_batches = 600            
+            num_total_batches = 600            
         else:
             folders = self.metaval_character_folders
             num_total_batches = 600
 
         # make list of files
         print('Generating filenames')
-        if self.datasource == 'cifar':
+        if self.datasource == 'omniglot':
             if not train:
                 all_filenames = []
                 from datetime import datetime
@@ -153,7 +153,35 @@ class DataGenerator(object):
             # temp
             # save and reload pickle for fast iteration
             else:
-                with open("cifar_filenames_25way1shot.pkl", 'rb') as file:
+                with open("omniglot_filenames_5way1shot.pkl", 'rb') as file:
+                    # pickle.dump(all_filenames, file)
+                    all_filenames = pickle.load(file)
+                # quit()
+                labels = list(np.concatenate(np.array(self.num_samples_per_class * [list(range(self.num_classes))]).T, axis=0))
+        elif self.datasource == 'cifar':
+            if not train:
+                all_filenames = []
+                from datetime import datetime
+                start = datetime.now()
+                for i in range(num_total_batches):
+                    if (i + 1) % 5000 == 0:
+                        print('Generated {} tasks...'.format((i + 1)))
+                    sampled_character_folders = random.sample(folders, self.num_classes)
+                    random.shuffle(sampled_character_folders)
+
+                    # temp for pretraining
+                    # sampled_character_folders = folders
+
+                    labels_and_images = get_images(sampled_character_folders, range(self.num_classes), nb_samples=self.num_samples_per_class, shuffle=False)
+                    # make sure the above isn't randomized order
+                    labels = [li[0] for li in labels_and_images]
+                    filenames = [li[1] for li in labels_and_images]
+                    all_filenames.extend(filenames)
+
+            # temp
+            # save and reload pickle for fast iteration
+            else:
+                with open("cifar_filenames_5way1shot.pkl", 'rb') as file:
                     # pickle.dump(all_filenames, file)
                     all_filenames = pickle.load(file)
                 # quit()

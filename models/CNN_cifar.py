@@ -91,20 +91,11 @@ class CNN_cifar(BaseModel):
 		num_shot_train = tf.shape(input_tensors['train_inputs'])[1]
 		num_shot_test = tf.shape(input_tensors['test_inputs'])[1]
 
-		# Add noise to train_inputs
-		# noise_mask = tf.random_normal(
-		# 	shape=(batchsize*num_shot_train, 32, 32, 3),
-		# 	mean=1.0,
-		# 	stddev=1.0,
-		# 	dtype=tf.float32,
-		# 	seed=None,
-		# 	name="noise",
-		# )
-
 		# Extract training features
 		train_feature_extractor = FeatureExtractor(self.train_inputs, self.is_training)
 		train_labels = tf.reshape(self.train_labels, [batchsize, -1, self.num_classes])
 		train_features = tf.reshape(train_feature_extractor.output, [batchsize, -1, 2*2*64])
+		train_features = tf.nn.l2_normalize(train_features, dim=-1)
 		# train_features /= tf.norm(train_features, axis=-1, keep_dims=True)
 		self.train_features = train_features
 		# Take mean of features for each class
@@ -147,37 +138,25 @@ class CNN_cifar(BaseModel):
 				kernel_initializer=tf.contrib.layers.xavier_initializer(),
 			)
 
-		# class_weights = tf.get_variable(
-		# 	name="init_weights",
-		# 	shape=(1, 5, 2*2*64),
-		# 	dtype=tf.float32,
-		# 	trainable=True,
-		# )
-		# class_weights = tf.tile(class_weights, multiples=[batchsize, 1, 1])
-
-		# Gradient descent on training set
-		# for i in np.arange(5):
-		# 	train_logits = tf.matmul(train_features, class_weights, transpose_b=True)
-		# 	train_loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=self.train_labels, logits=train_logits))
-		# 	grad = tf.gradients(train_loss, class_weights)[0]
-		# 	class_weights = class_weights - 0.01 * grad
-
 		# Extract test features
 		test_feature_extractor = FeatureExtractor(self.test_inputs, self.is_training)
 		test_features = tf.reshape(test_feature_extractor.output, [batchsize, -1, 2*2*64])
+
+		class_weights = tf.nn.l2_normalize(class_weights, dim=-1)
+		test_features = tf.nn.l2_normalize(test_features, dim=-1)
 		
 		# class_weights /= tf.norm(class_weights, axis=-1, keep_dims=True)
 		# test_features /= tf.norm(test_features, axis=-1, keep_dims=True)
 
-		# self.scale = tf.Variable(
-		# 	initial_value=10.,
-		# 	name="scale",
-		# 	# shape=(1),
-		# 	dtype=tf.float32,
-		# )
+		self.scale = tf.Variable(
+			initial_value=10.,
+			name="scale",
+			# shape=(1),
+			dtype=tf.float32,
+		)
 
-		logits = tf.matmul(test_features, class_weights, transpose_b=True)
-		# logits = logits * self.scale
+		logits = tf.matmul(test_features, output_weights, transpose_b=True)
+		logits = logits * self.scale
 		self.logits = logits = tf.reshape(logits, [-1, self.num_classes])
 
 		# Regularize with GOR loss https://arxiv.org/abs/1708.06320
@@ -198,5 +177,5 @@ class CNN_cifar(BaseModel):
 
 		# regularization = tf.reduce_sum([tf.nn.l2_loss(var) for var in tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, self.name + '/attention')])
 		self.loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=self.test_labels, logits=self.logits))
-		self.optimize = tf.train.AdamOptimizer(learning_rate=1e-3).minimize(self.loss + 0.1 * loss_l2)
+		self.optimize = tf.train.AdamOptimizer(learning_rate=1e-3).minimize(self.loss)
 		self.test_accuracy = tf.contrib.metrics.accuracy(labels=tf.argmax(self.test_labels, axis=1), predictions=tf.argmax(self.logits, axis=1))
