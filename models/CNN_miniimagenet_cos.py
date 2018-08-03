@@ -13,7 +13,7 @@ class FeatureExtractor(object):
 	def __init__(self, inputs, is_training):
 		self.inputs = inputs
 		self.is_training = is_training
-		self.n_filters = [96, 192, 384, 512]
+		self.n_filters = [64, 64, 128, 128]
 		self.dropout_rate = [None, None, 0.1, 0.3]
 		with tf.variable_scope("extractor", reuse=tf.AUTO_REUSE):
 			self.build_model()
@@ -59,11 +59,12 @@ class FeatureExtractor(object):
 				)
 			running_output = dropout
 		self.output = running_output # shape = (meta_batch_size*num_shot_train, 2, 2, 64)
+		self.output_dim = tf.shape(running_output)[1] * tf.shape(running_output)[2] * tf.shape(running_output)[3]
 
-class CNN_cifar(BaseModel):
+class CNN_miniimagenet(BaseModel):
 
 	def __init__(self, name, num_classes, input_tensors=None):
-		super(CNN_cifar, self).__init__()
+		super(CNN_miniimagenet, self).__init__()
 		self.name = name
 		self.num_classes = num_classes
 		# Attention parameters
@@ -78,17 +79,17 @@ class CNN_cifar(BaseModel):
 
 		if input_tensors is None:
 			self.m_train_inputs = tf.placeholder(
-				shape=(None, 5*5, 32*32*3),
+				shape=(None, 5*1, 84*84*3),
 				dtype=tf.float32,
 			)
-			self.train_inputs = tf.reshape(self.m_train_inputs, [-1, 32, 32, 3])
+			self.train_inputs = tf.reshape(self.m_train_inputs, [-1, 84, 84, 3])
 			self.m_test_inputs = tf.placeholder(
-				shape=(None, 5*1, 32*32*3),
+				shape=(None, 5*1, 84*84*3),
 				dtype=tf.float32,
 			)
-			self.test_inputs = tf.reshape(self.m_test_inputs, [-1, 32, 32, 3])
+			self.test_inputs = tf.reshape(self.m_test_inputs, [-1, 84, 84, 3])
 			self.m_train_labels = tf.placeholder(
-				shape=(None, 5*5, 5),
+				shape=(None, 5*1, 5),
 				dtype=tf.float32,
 			)
 			self.train_labels = tf.reshape(self.m_train_labels, [-1, self.num_classes])
@@ -103,8 +104,8 @@ class CNN_cifar(BaseModel):
 			num_shot_test = tf.shape(self.m_test_inputs)[1]
 
 		else:
-			self.train_inputs = tf.reshape(input_tensors['train_inputs'], [-1, 32, 32, 3])
-			self.test_inputs = tf.reshape(input_tensors['test_inputs'], [-1, 32, 32, 3])
+			self.train_inputs = tf.reshape(input_tensors['train_inputs'], [-1, 84, 84, 3])
+			self.test_inputs = tf.reshape(input_tensors['test_inputs'], [-1, 84, 84, 3])
 			self.train_labels = tf.reshape(input_tensors['train_labels'], [-1, self.num_classes])
 			self.test_labels = tf.reshape(input_tensors['test_labels'], [-1, self.num_classes])
 
@@ -121,14 +122,13 @@ class CNN_cifar(BaseModel):
 		# Extract training features
 		train_feature_extractor = FeatureExtractor(self.train_inputs, self.is_training)
 		train_labels = tf.reshape(self.train_labels, [batchsize, -1, self.num_classes])
-		train_features = tf.reshape(train_feature_extractor.output, [batchsize, -1, 2*2*512])
+		train_features = tf.reshape(train_feature_extractor.output, [batchsize, -1, train_feature_extractor.output_dim])
 		train_features = tf.nn.l2_normalize(train_features, dim=-1)
 		# train_features /= tf.norm(train_features, axis=-1, keep_dims=True)
 		self.train_features = train_features
 		# Take mean of features for each class
 		output_weights = tf.matmul(train_labels, train_features, transpose_a=True) / tf.expand_dims(tf.reduce_sum(train_labels, axis=1), axis=-1)
 		output_weights = tf.nn.l2_normalize(output_weights, dim=-1)
-
 		# Calculate class weights with attention
 		# with tf.variable_scope("attention"):
 		# 	train_embed = tf.layers.dense(
@@ -168,7 +168,7 @@ class CNN_cifar(BaseModel):
 
 		# Extract test features
 		test_feature_extractor = FeatureExtractor(self.test_inputs, self.is_training)
-		test_features = tf.reshape(test_feature_extractor.output, [batchsize, -1, 2*2*512])
+		test_features = tf.reshape(test_feature_extractor.output, [batchsize, -1, train_feature_extractor.output_dim])
 
 		# class_weights = tf.nn.l2_normalize(class_weights, dim=-1)
 		test_features = tf.nn.l2_normalize(test_features, dim=-1)

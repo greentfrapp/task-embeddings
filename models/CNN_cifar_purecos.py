@@ -20,18 +20,44 @@ class FeatureExtractor(object):
 
 	def build_model(self):
 		running_output = self.inputs
+		prev_filters = 3
 		for i, filters in enumerate(self.n_filters):
-			conv = tf.layers.conv2d(
-				inputs=running_output,
-				filters=filters,
-				kernel_size=(3, 3),
-				strides=(1, 1),
-				padding="same",
-				activation=None,
-				kernel_initializer=tf.contrib.layers.xavier_initializer_conv2d(),
-				name="conv_{}".format(i),
-				reuse=tf.AUTO_REUSE,
+			conv_weights = tf.get_variable(
+				name='conv_weights_{}'.format(i),
+				shape=[3, 3, prev_filters, filters],
+				initializer=tf.contrib.layers.xavier_initializer_conv2d(),
+				dtype=tf.float32,
 			)
+			conv_weights = tf.reshape(conv_weights, [9, prev_filters, filters])
+			conv_weights = tf.nn.l2_normalize(conv_weights, axis=0)
+			conv_weights = tf.reshape(conv_weights, [3, 3, prev_filters, filters])
+			prev_filters = filters
+			conv_bias = tf.Variable(
+				initial_value=tf.zeros([filters]),
+				name='conv_bias_{}'.format(i),
+			)
+			conv = tf.nn.conv2d(
+				input=running_output,
+				filter=conv_weights,
+				strides=(1, 1, 1, 1),
+				padding='SAME',
+				name='conv_{}'.format(i),
+			)
+			normalizer = 27. / tf.cast(tf.shape(running_output)[1] * tf.shape(running_output)[2] * tf.shape(running_output)[3], tf.float32) * tf.reduce_sum(tf.reduce_sum(tf.reduce_sum(running_output, axis=-1), axis=-1), axis=-1)
+			normalizer = tf.reshape(normalizer, [-1, 1, 1, 1])
+			conv = conv / normalizer
+			conv = conv + conv_bias
+			# conv = tf.layers.conv2d(
+			# 	inputs=running_output,
+			# 	filters=filters,
+			# 	kernel_size=(3, 3),
+			# 	strides=(1, 1),
+			# 	padding="same",
+			# 	activation=None,
+			# 	kernel_initializer=tf.contrib.layers.xavier_initializer_conv2d(),
+			# 	name="conv_{}".format(i),
+			# 	reuse=tf.AUTO_REUSE,
+			# )
 			norm = tf.contrib.layers.batch_norm(
 				inputs=conv,
 				activation_fn=None,
@@ -107,15 +133,16 @@ class CNN_cifar(BaseModel):
 		train_features = tf.reshape(train_feature_extractor.output, [batchsize, -1, 2*2*64])
 		# train_features /= tf.norm(train_features, axis=-1, keep_dims=True)
 		self.train_features = train_features
+		train_features = tf.nn.l2_normalize(train_features, dim=-1)
 		# Take mean of features for each class
 		class_weights = tf.matmul(train_labels, train_features, transpose_a=True) / tf.expand_dims(tf.reduce_sum(train_labels, axis=1), axis=-1)
 		
-		for i in range(5):
-			train_logits = tf.matmul(train_features, class_weights, transpose_b=True)
-			train_logits = tf.reshape(train_logits, [-1, self.num_classes])
-			train_loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=self.train_labels, logits=train_logits))
-			gradient = tf.gradients(train_loss, class_weights)
-			class_weights = class_weights - 0.01 * gradient[0]
+		# for i in range(5):
+		# 	train_logits = tf.matmul(train_features, class_weights, transpose_b=True)
+		# 	train_logits = tf.reshape(train_logits, [-1, self.num_classes])
+		# 	train_loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=self.train_labels, logits=train_logits))
+		# 	gradient = tf.gradients(train_loss, class_weights)
+		# 	class_weights = class_weights - 0.01 * gradient[0]
 		
 		# # Calculate class weights with attention
 		# with tf.variable_scope("attention"):
@@ -172,19 +199,22 @@ class CNN_cifar(BaseModel):
 		# Extract test features
 		test_feature_extractor = FeatureExtractor(self.test_inputs, self.is_training)
 		test_features = tf.reshape(test_feature_extractor.output, [batchsize, -1, 2*2*64])
+
+		class_weights = tf.nn.l2_normalize(class_weights, dim=-1)
+		test_features = tf.nn.l2_normalize(test_features, dim=-1)
 		
 		# class_weights /= tf.norm(class_weights, axis=-1, keep_dims=True)
 		# test_features /= tf.norm(test_features, axis=-1, keep_dims=True)
 
-		# self.scale = tf.Variable(
-		# 	initial_value=10.,
-		# 	name="scale",
-		# 	# shape=(1),
-		# 	dtype=tf.float32,
-		# )
+		self.scale = tf.Variable(
+			initial_value=10.,
+			name="scale",
+			# shape=(1),
+			dtype=tf.float32,
+		)
 
 		logits = tf.matmul(test_features, class_weights, transpose_b=True)
-		# logits = logits * self.scale
+		logits = logits * self.scale
 		self.logits = logits = tf.reshape(logits, [-1, self.num_classes])
 
 		# Regularize with GOR loss https://arxiv.org/abs/1708.06320
