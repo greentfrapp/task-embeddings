@@ -15,52 +15,264 @@ class FeatureExtractor(object):
 		self.is_training = is_training
 		self.n_filters = [96, 192, 384, 512]
 		self.dropout_rate = [None, None, 0.1, 0.3]
+		self.N = 2 # totals to 28 layers
+		self.k = 5
 		with tf.variable_scope("extractor", reuse=tf.AUTO_REUSE):
 			self.build_model()
 
 	def build_model(self):
 		running_output = self.inputs
-		for i, filters in enumerate(self.n_filters):
-			conv = tf.layers.conv2d(
+
+		# conv_1
+
+		conv = tf.layers.conv2d(
+			inputs=running_output,
+			filters=16,
+			kernel_size=(3, 3),
+			strides=(1, 1),
+			padding='same',
+			activation=None,
+			kernel_initializer=tf.contrib.layers.xavier_initializer_conv2d(),
+			name='conv_1',
+		)
+		norm = tf.contrib.layers.batch_norm(
+			inputs=conv,
+			activation_fn=None,
+			reuse=tf.AUTO_REUSE,
+			scope="model/extractor/conv_1_norm",
+		)
+		relu = tf.nn.relu(norm)
+
+		running_output = relu
+
+		# conv_2
+
+		for i in np.arange(self.N):
+
+			if i != 0:
+				norm = tf.contrib.layers.batch_norm(
+					inputs=running_output,
+					activation_fn=None,
+					reuse=tf.AUTO_REUSE,
+					scope="model/extractor/conv_2_norm_0_{}".format(i),
+				)
+				relu = tf.nn.relu(norm)
+				running_output = relu
+
+			conv_1 = tf.layers.conv2d(
 				inputs=running_output,
-				filters=filters,
+				filters=16*self.k,
 				kernel_size=(3, 3),
 				strides=(1, 1),
-				padding="same",
+				padding='same',
 				activation=None,
 				kernel_initializer=tf.contrib.layers.xavier_initializer_conv2d(),
-				name="conv_{}".format(i),
-				reuse=tf.AUTO_REUSE,
+				name='conv_2_conv_1_{}'.format(i),
 			)
 			norm = tf.contrib.layers.batch_norm(
-				inputs=conv,
+				inputs=conv_1,
 				activation_fn=None,
 				reuse=tf.AUTO_REUSE,
-				scope="model/extractor/norm_{}".format(i),
-				# is_training=self.is_training, # should be True for both metatrain and metatest
+				scope="model/extractor/conv_2_norm_1_{}".format(i),
 			)
-			maxpool = tf.layers.max_pooling2d(
-				inputs=norm,
-				pool_size=(2, 2),
-				strides=(2, 2),
-				padding="valid",
+			relu = tf.nn.relu(norm)
+			conv_2 = tf.layers.conv2d(
+				inputs=relu,
+				filters=16*self.k,
+				kernel_size=(3, 3),
+				strides=(1, 1),
+				padding='same',
+				activation=None,
+				kernel_initializer=tf.contrib.layers.xavier_initializer_conv2d(),
+				name='conv_2_conv_2_{}'.format(i),
 			)
-			if i == len(self.n_filters) - 1:
-				relu = maxpool
-			else:
-				relu = tf.nn.leaky_relu(
-					features=maxpool,
-					alpha=0.1,
+			if i == 0:
+				running_output = tf.layers.conv2d(
+					inputs=running_output,
+					filters=16*self.k,
+					kernel_size=(3, 3),
+					strides=(1, 1),
+					padding='same',
+					activation=None,
+					kernel_initializer=tf.contrib.layers.xavier_initializer_conv2d(),
+					name='conv_2_conv_downsample_{}'.format(i),
 				)
-			if self.dropout_rate[i] is None:
-				dropout = relu
-			else:
-				dropout = tf.layers.dropout(
-					inputs=relu,
-					rate=self.dropout_rate[i],
-					training=self.is_training,
+			running_output = conv_2 + running_output
+
+		norm = tf.contrib.layers.batch_norm(
+			inputs=running_output,
+			activation_fn=None,
+			reuse=tf.AUTO_REUSE,
+			scope="model/extractor/conv_2_norm_2_{}".format(i),
+		)
+		relu = tf.nn.relu(norm)
+		running_output = relu
+
+		# conv_3
+
+		for i in np.arange(self.N):
+
+			if i != 0:
+				norm = tf.contrib.layers.batch_norm(
+					inputs=running_output,
+					activation_fn=None,
+					reuse=tf.AUTO_REUSE,
+					scope="model/extractor/conv_3_norm_0_{}".format(i),
 				)
-			running_output = dropout
+				relu = tf.nn.relu(norm)
+				running_output = relu
+
+			if i == 0:
+				conv_1 = tf.layers.conv2d(
+					inputs=running_output,
+					filters=32*self.k,
+					kernel_size=(3, 3),
+					strides=(2, 2),
+					padding='same',
+					activation=None,
+					kernel_initializer=tf.contrib.layers.xavier_initializer_conv2d(),
+					name='conv_3_conv_1_{}'.format(i),
+				)
+			else:
+				conv_1 = tf.layers.conv2d(
+					inputs=running_output,
+					filters=32*self.k,
+					kernel_size=(3, 3),
+					strides=(1, 1),
+					padding='same',
+					activation=None,
+					kernel_initializer=tf.contrib.layers.xavier_initializer_conv2d(),
+					name='conv_3_conv_1_{}'.format(i),
+				)
+			norm = tf.contrib.layers.batch_norm(
+				inputs=conv_1,
+				activation_fn=None,
+				reuse=tf.AUTO_REUSE,
+				scope="model/extractor/conv_3_norm_1_{}".format(i),
+			)
+			relu = tf.nn.relu(norm)
+			dropout = tf.layers.dropout(
+				inputs=relu,
+				rate=0.3,
+				training=self.is_training,
+			)
+			conv_2 = tf.layers.conv2d(
+				inputs=relu,
+				filters=32*self.k,
+				kernel_size=(3, 3),
+				strides=(1, 1),
+				padding='same',
+				activation=None,
+				kernel_initializer=tf.contrib.layers.xavier_initializer_conv2d(),
+				name='conv_3_conv_2_{}'.format(i),
+			)
+			if i == 0:
+				running_output = tf.layers.conv2d(
+					inputs=running_output,
+					filters=32*self.k,
+					kernel_size=(3, 3),
+					strides=(2, 2),
+					padding='same',
+					activation=None,
+					kernel_initializer=tf.contrib.layers.xavier_initializer_conv2d(),
+					name='conv_3_conv_downsample_{}'.format(i),
+				)
+			running_output = conv_2 + running_output
+
+		norm = tf.contrib.layers.batch_norm(
+			inputs=running_output,
+			activation_fn=None,
+			reuse=tf.AUTO_REUSE,
+			scope="model/extractor/conv_3_norm_2_{}".format(i),
+		)
+		relu = tf.nn.relu(norm)
+		running_output = relu
+
+		# conv_4
+
+		for i in np.arange(self.N):
+
+			if i != 0:
+				norm = tf.contrib.layers.batch_norm(
+					inputs=running_output,
+					activation_fn=None,
+					reuse=tf.AUTO_REUSE,
+					scope="model/extractor/conv_4_norm_0_{}".format(i),
+				)
+				relu = tf.nn.relu(norm)
+				running_output = relu
+
+			if i == 0:
+				conv_1 = tf.layers.conv2d(
+					inputs=running_output,
+					filters=64*self.k,
+					kernel_size=(3, 3),
+					strides=(2, 2),
+					padding='same',
+					activation=None,
+					kernel_initializer=tf.contrib.layers.xavier_initializer_conv2d(),
+					name='conv_4_conv_1_{}'.format(i),
+				)
+			else:
+				conv_1 = tf.layers.conv2d(
+					inputs=running_output,
+					filters=64*self.k,
+					kernel_size=(3, 3),
+					strides=(1, 1),
+					padding='same',
+					activation=None,
+					kernel_initializer=tf.contrib.layers.xavier_initializer_conv2d(),
+					name='conv_4_conv_1_{}'.format(i),
+				)
+			norm = tf.contrib.layers.batch_norm(
+				inputs=conv_1,
+				activation_fn=None,
+				reuse=tf.AUTO_REUSE,
+				scope="model/extractor/conv_4_norm_1_{}".format(i),
+			)
+			relu = tf.nn.relu(norm)
+			dropout = tf.layers.dropout(
+				inputs=relu,
+				rate=0.3,
+				training=self.is_training,
+			)
+			conv_2 = tf.layers.conv2d(
+				inputs=dropout,
+				filters=64*self.k,
+				kernel_size=(3, 3),
+				strides=(1, 1),
+				padding='same',
+				activation=None,
+				kernel_initializer=tf.contrib.layers.xavier_initializer_conv2d(),
+				name='conv_4_conv_2_{}'.format(i),
+			)
+			if i == 0:
+				running_output = tf.layers.conv2d(
+					inputs=running_output,
+					filters=64*self.k,
+					kernel_size=(3, 3),
+					strides=(2, 2),
+					padding='same',
+					activation=None,
+					kernel_initializer=tf.contrib.layers.xavier_initializer_conv2d(),
+					name='conv_4_conv_downsample_{}'.format(i),
+				)
+			running_output = conv_2 + running_output
+
+		norm = tf.contrib.layers.batch_norm(
+			inputs=running_output,
+			activation_fn=None,
+			reuse=tf.AUTO_REUSE,
+			scope="model/extractor/conv_4_norm_2_{}".format(i),
+		)
+		relu = tf.nn.relu(norm)
+		mean_pool = tf.layers.average_pooling2d(
+			inputs=relu,
+			pool_size=(2, 2),
+			strides=(1, 1),
+			padding='same',
+		)
+
 		self.output = running_output # shape = (meta_batch_size*num_shot_train, 2, 2, 64)
 		self.output_dim = tf.shape(running_output)[1] * tf.shape(running_output)[2] * tf.shape(running_output)[3]
 
