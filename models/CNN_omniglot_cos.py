@@ -89,41 +89,41 @@ class CNN_omniglot(BaseModel):
 		output_weights = tf.nn.l2_normalize(output_weights, dim=-1)
 
 		# Calculate class weights with attention
-		with tf.variable_scope("attention"):
-			train_embed = tf.layers.dense(
-				inputs=output_weights,
-				units=self.hidden,
-				activation=None,
-				name="train_embed",
-			)
-			for i in np.arange(self.attention_layers):
-				train_embed, _ = self.attention(
-					query=train_embed,
-					key=train_embed,
-					value=train_embed,
-				)
-				dense = tf.layers.dense(
-					inputs=train_embed,
-					units=self.hidden * 2,
-					activation=tf.nn.relu,
-					kernel_initializer=tf.contrib.layers.xavier_initializer(),
-					name="encoder_layer{}_dense1".format(i + 1)
-				)
-				train_embed += tf.layers.dense(
-					inputs=dense,
-					units=self.hidden,
-					activation=None,
-					kernel_initializer=tf.contrib.layers.xavier_initializer(),
-					name="encoder_layer{}_dense2".format(i + 1)
-				)
-				train_embed = tf.contrib.layers.layer_norm(train_embed, begin_norm_axis=2)
+		# with tf.variable_scope("attention"):
+		# 	train_embed = tf.layers.dense(
+		# 		inputs=output_weights,
+		# 		units=self.hidden,
+		# 		activation=None,
+		# 		name="train_embed",
+		# 	)
+		# 	for i in np.arange(self.attention_layers):
+		# 		train_embed, _ = self.attention(
+		# 			query=train_embed,
+		# 			key=train_embed,
+		# 			value=train_embed,
+		# 		)
+		# 		dense = tf.layers.dense(
+		# 			inputs=train_embed,
+		# 			units=self.hidden * 2,
+		# 			activation=tf.nn.relu,
+		# 			kernel_initializer=tf.contrib.layers.xavier_initializer(),
+		# 			name="encoder_layer{}_dense1".format(i + 1)
+		# 		)
+		# 		train_embed += tf.layers.dense(
+		# 			inputs=dense,
+		# 			units=self.hidden,
+		# 			activation=None,
+		# 			kernel_initializer=tf.contrib.layers.xavier_initializer(),
+		# 			name="encoder_layer{}_dense2".format(i + 1)
+		# 		)
+		# 		train_embed = tf.contrib.layers.layer_norm(train_embed, begin_norm_axis=2)
 
-			class_weights = tf.layers.dense(
-				inputs=train_embed,
-				units=64,
-				activation=None,
-				kernel_initializer=tf.contrib.layers.xavier_initializer(),
-			)
+		# 	class_weights = tf.layers.dense(
+		# 		inputs=train_embed,
+		# 		units=64,
+		# 		activation=None,
+		# 		kernel_initializer=tf.contrib.layers.xavier_initializer(),
+		# 	)
 
 		# Extract test features
 		test_feature_extractor = FeatureExtractor(self.test_inputs, self.is_training)

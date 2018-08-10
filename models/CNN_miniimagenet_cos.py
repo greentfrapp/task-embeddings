@@ -131,6 +131,7 @@ class CNN_miniimagenet(BaseModel):
 		self.train_features = train_features
 		# Take mean of features for each class
 		output_weights = tf.matmul(train_labels, train_features, transpose_a=True) / tf.expand_dims(tf.reduce_sum(train_labels, axis=1), axis=-1)
+		
 		output_weights = tf.nn.l2_normalize(output_weights, dim=-1)
 		# Calculate class weights with attention
 		# with tf.variable_scope("attention"):
@@ -179,15 +180,15 @@ class CNN_miniimagenet(BaseModel):
 		# class_weights /= tf.norm(class_weights, axis=-1, keep_dims=True)
 		# test_features /= tf.norm(test_features, axis=-1, keep_dims=True)
 
-		self.scale = tf.Variable(
-			initial_value=10.,
-			name="scale",
-			# shape=(1),
-			dtype=tf.float32,
-		)
+		# self.scale = tf.Variable(
+		# 	initial_value=10.,
+		# 	name="scale",
+		# 	# shape=(1),
+		# 	dtype=tf.float32,
+		# )
 
 		logits = tf.matmul(test_features, output_weights, transpose_b=True)
-		logits = logits * self.scale
+		# logits = logits * self.scale
 		self.logits = logits = tf.reshape(logits, [-1, self.num_classes])
 
 		# Regularize with GOR loss https://arxiv.org/abs/1708.06320
@@ -207,6 +208,7 @@ class CNN_miniimagenet(BaseModel):
 		# loss_l2 = tf.reduce_mean(tf.nn.l2_loss(class_weights))
 
 		# regularization = tf.reduce_sum([tf.nn.l2_loss(var) for var in tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, self.name + '/attention')])
-		self.loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=self.test_labels, logits=self.logits))
+		self.loss = tf.losses.mean_squared_error(labels=self.test_labels, predictions=self.logits)
+		# self.loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=self.test_labels, logits=self.logits))
 		self.optimize = tf.train.AdamOptimizer(learning_rate=1e-3).minimize(self.loss)
 		self.test_accuracy = tf.contrib.metrics.accuracy(labels=tf.argmax(self.test_labels, axis=1), predictions=tf.argmax(self.logits, axis=1))
