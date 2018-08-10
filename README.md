@@ -6,6 +6,8 @@ This repository started as a potential idea for metalearning. While I eventually
 
 Note: the following assumes understanding of the metalearning problem. Otherwise, see [here](http://bair.berkeley.edu/blog/2017/07/18/learning-to-learn/) for a concise (and still pretty relevant) summary of the field by Chelsea Finn.
 
+Instructions to run the scripts and replicate the experiments are [here](#instructions).
+
 ## Rethinking Weights
 
 Consider a simple classifier with a 3-dimensional input ![\mathbf{x}](http://latex.codecogs.com/gif.latex?%5Cmathbf%7Bx%7D), a 3-dimensional output ![\mathbf{y}](http://latex.codecogs.com/gif.latex?%5Cmathbf%7By%7D) (one-hot over 3 classes), such that (assuming no bias):
@@ -57,8 +59,8 @@ Using 4 convolution blocks, with 64 filters each.
 | Siamese Net (Koch, 2015) | 97.3 | 88.2 |
 | Matching Nets (Santoro et al., 2016) | 98.1 | 93.8 |
 | MAML (Finn et al., 2017) | 98.7 ± 0.4 | 95.8 ± 0.3 |
-| SNAIL (Mishra et al., 2017) | **98.96 ± 0.2** | 97.64 ± 0.3 |
-| Vanilla Cosine | **99.3 ± 0.3** |  |
+| SNAIL (Mishra et al., 2017) | **98.96 ± 0.2** | **97.64 ± 0.3** |
+| Vanilla Cosine | **99.3 ± 0.3** | 95.1 ± 0.4 |
 
 #### CIFAR-FS Accuracy
 
@@ -132,8 +134,4 @@ Another concern is that in the above methods, the weights are only generated for
 
 ## Instructions
 
-## Notes
 
-I am sharing this via GitHub because I thought the results were cool but not really significant enough to warrant a full publication.
-
-Citations to this are not required but greatly appreciated!
