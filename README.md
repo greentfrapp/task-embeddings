@@ -8,29 +8,31 @@ Note: the following assumes understanding of the metalearning problem. Otherwise
 
 ## Rethinking Weights
 
-Consider a simple neural network classifier with a 3-dimensional input x, a 3-dimensional output y (one-hot over 3 classes) and 1 hidden layer. 
+Consider a simple classifier with a 3-dimensional input ![\mathbf{x}](http://latex.codecogs.com/gif.latex?%5Cmathbf%7Bx%7D), a 3-dimensional output ![\mathbf{y}](http://latex.codecogs.com/gif.latex?%5Cmathbf%7By%7D) (one-hot over 3 classes), such that (assuming no bias):
 
-The weights matrix W (assuming no bias) has shape (3, 3). The magnitude of W_{i,j} indicates the importance of x_j in calculating y_i. The sign of W_{i,j} indicates the direction of the relationship between x_j and y_i.
+![\mathbf{y}=\sigma(\mathbf{x}^\top\mathbf{W})](http://latex.codecogs.com/gif.latex?%5Cmathbf%7By%7D%3D%5Csigma%28%5Cmathbf%7Bx%7D%5E%5Ctop%5Cmathbf%7BW%7D%29) 
+
+The weights matrix ![\mathbf{W}](http://latex.codecogs.com/gif.latex?%5Cmathbf%7BW%7D) (assuming no bias) has shape (3, 3). The magnitude of ![W_{i,j}](http://latex.codecogs.com/gif.latex?W_%7Bi%2Cj%7D) (where each column corresponds to a class) indicates the importance of ![x_i](http://latex.codecogs.com/gif.latex?x_i) in determining ![y_j](http://latex.codecogs.com/gif.latex?y_j). The sign of ![W_{i,j}](http://latex.codecogs.com/gif.latex?W_%7Bi%2Cj%7D) indicates the direction of the relationship between ![x_i](http://latex.codecogs.com/gif.latex?x_i) and ![y_j](http://latex.codecogs.com/gif.latex?y_j).
 
 That is about as much we can say about the weights matrix.
 
-However, suppose we normalize both x and each W_{i,:}, before performing the dot product. 
+However, suppose we normalize both ![\mathbf{x}](http://latex.codecogs.com/gif.latex?%5Cmathbf%7Bx%7D) and each ![\mathbf{W}_{:,j}](http://latex.codecogs.com/gif.latex?%5Cmathbf%7BW%7D_%7B%3A%2Cj%7D), before performing the dot product. 
 
-Let's consider just the weights that affect the first class (W_{1,:}) and denote the normalized vectors as x_n and W_n1.
+Let's consider just the weights that affect the first class (![\mathbf{W}_{:,1}](http://latex.codecogs.com/gif.latex?%5Cmathbf%7BW%7D_%7B%3A%2C1%7D)) and denote the normalized vectors as ![\mathbf{\hat{x}}](http://latex.codecogs.com/gif.latex?%5Cmathbf%7B%5Chat%7Bx%7D%7D) and ![\mathbf{\hat{W_{:,1}}}](http://latex.codecogs.com/gif.latex?%5Cmathbf%7B%5Chat%7BW_%7B%3A%2C1%7D%7D%7D).
 
-The dot product effectively computes the cosine similarity between x_n and W_n1.
+The dot product effectively computes the cosine similarity between ![\mathbf{\hat{x}}](http://latex.codecogs.com/gif.latex?%5Cmathbf%7B%5Chat%7Bx%7D%7D) and ![\mathbf{\hat{W_{:,1}}}](http://latex.codecogs.com/gif.latex?%5Cmathbf%7B%5Chat%7BW_%7B%3A%2C1%7D%7D%7D).
 
-- If the dot product gives 1, x_n and W_n1 are identical.
-- If the dot product gives 0, x_n and W_n1 are orthogonal
-- If the dot product gives -1, x_n and W_n1 are in opposite directions
+- If the dot product gives 1, ![\mathbf{\hat{x}}](http://latex.codecogs.com/gif.latex?%5Cmathbf%7B%5Chat%7Bx%7D%7D) and ![\mathbf{\hat{W_{:,1}}}](http://latex.codecogs.com/gif.latex?%5Cmathbf%7B%5Chat%7BW_%7B%3A%2C1%7D%7D%7D) are identical.
+- If the dot product gives 0, ![\mathbf{\hat{x}}](http://latex.codecogs.com/gif.latex?%5Cmathbf%7B%5Chat%7Bx%7D%7D) and ![\mathbf{\hat{W_{:,1}}}](http://latex.codecogs.com/gif.latex?%5Cmathbf%7B%5Chat%7BW_%7B%3A%2C1%7D%7D%7D) are orthogonal
+- If the dot product gives -1, ![\mathbf{\hat{x}}](http://latex.codecogs.com/gif.latex?%5Cmathbf%7B%5Chat%7Bx%7D%7D) and ![\mathbf{\hat{W_{:,1}}}](http://latex.codecogs.com/gif.latex?%5Cmathbf%7B%5Chat%7BW_%7B%3A%2C1%7D%7D%7D) are in opposite directions
 
-We can also interpret W_n1 as a template, prototype or 'normal' example of class 1. Then it makes perfect sense to classify x_n by calculating the cosine similarity between x_n and W_n1.
+We can also interpret ![\mathbf{\hat{W_{:,1}}}](http://latex.codecogs.com/gif.latex?%5Cmathbf%7B%5Chat%7BW_%7B%3A%2C1%7D%7D%7D) as a template, prototype or 'normal' example of class 1. Then it makes perfect sense to classify whether ![\mathbf{\hat{x}}](http://latex.codecogs.com/gif.latex?%5Cmathbf%7B%5Chat%7Bx%7D%7D) belongs to class 1 by calculating the cosine similarity between ![\mathbf{\hat{x}}](http://latex.codecogs.com/gif.latex?%5Cmathbf%7B%5Chat%7Bx%7D%7D) and ![\mathbf{\hat{W_{:,1}}}](http://latex.codecogs.com/gif.latex?%5Cmathbf%7B%5Chat%7BW_%7B%3A%2C1%7D%7D%7D).
 
 #### Here's the kicker.
 
 Suppose we have trained a model on the 3 classes. Then we discover (oh shit!) that there's a 4th class that we missed out. If we had trained the model using the normalized vectors (above), there is an easy way to get the weights for the 4th class without retraining the entire weights matrix.
 
-We simply calculate the average input feature vector over all the examples of the 4th class, then normalize it. This gives us the template or prototype for the new class. Then we can simply set that as an additional row in the weights matrix, W_n4.
+We simply calculate the average input feature vector over all the examples of the 4th class, then normalize it. This gives us the template or prototype for the new class. Then we can simply set that as an additional row in the weights matrix, ![\mathbf{\hat{W_{:,4}}}](http://latex.codecogs.com/gif.latex?%5Cmathbf%7B%5Chat%7BW_%7B%3A%2C4%7D%7D%7D).
 
 This is the concept used by Gidaris & Komodakis ([2018](https://arxiv.org/abs/1804.09458)) in tackling few-shot classification. It is also slightly related to Prototypical Networks by Snell et al. ([2017](https://arxiv.org/abs/1703.05175)) although they use Euclidean distance from the prototypes as a measure for classification.
 
@@ -110,7 +112,7 @@ Here's a visual outline of the method.
 
 One way to interpret this is to see the weights generator as a *systems of linear equations* solver. Suppose our extracted feature vector is 3-dimensional. Assuming we have a simple linear layer to generate a final scalar prediction, we basically have to solve for the coefficients of each of the 3 values in the feature vector. The weights generator learns to solve for the coefficients after training on different tasks. 
 
-Assuming no noise, we only require 3 equations (training samples + labels) to solve for 3 coefficients. But in the case of metalearning, we have few examples (typically 1 to 10) to solve for many coefficients (40 in the sinusoid toy task).
+Assuming no noise, we only require 3 equations (pairs of training samples + labels) to solve for 3 coefficients. But in the case of metalearning, we have few examples (typically 1 to 10) to solve for many coefficients (40 in the sinusoid toy task).
 
 Another way to interpret this is by analogy to a human. Consider the sinusoid toy problem (below). If a human was presented with 5 points from the function, it might be difficult for them to infer the correct function. However, if we provide information about the task distribution (such as, 'The functions are all sinusoids.') we can greatly reduce the solution space and make it possible for the human to give a good prediction. In that sense, both the feature extractor and the weights generator contain learned information about the task distribution.
 
@@ -132,6 +134,6 @@ Another concern is that in the above methods, the weights are only generated for
 
 ## Notes
 
-I am sharing this via GitHub because I thought the results were cool but not significant enough to warrant a full publication.
+I am sharing this via GitHub because I thought the results were cool but not really significant enough to warrant a full publication.
 
 Citations to this are not required but greatly appreciated!
