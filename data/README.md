@@ -94,7 +94,7 @@ Generating the classification tasks is different, since the classification tasks
 
 Again, we first initialize a `DataGenerator` object then generate samples and labels. But these generated samples and labels are Tensorflow tensors, which do not have any value until we run `tf.train.start_queue_runners()`. Instead, we pass these directly to any network layers, without the need for `tf.placeholder` objects.
 
-Example
+Example:
 
 ```
 data_generator = DataGenerator(
