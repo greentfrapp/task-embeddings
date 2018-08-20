@@ -40,7 +40,7 @@ Then just extract the entire `miniImagenet` folder into the current folder (`dat
 
 ## Additional Notes
 
-When running experiments, the `make_data_tensor` method in `data_generator.py` actually generates 2e+5 training tasks by randomly selecting combinations samples to make N-way k-shot tasks. This can take a while, possibly more than 30 minutes for CIFAR-FS and MiniImageNet. 
+When running experiments, the `make_data_tensor` method in `data_generator.py` actually generates 2e+5 training tasks by randomly selecting combinations of classes and samples to make N-way k-shot tasks. This can take a while, possibly more than 30 minutes for CIFAR-FS and MiniImageNet. 
 
 An alternative is to generate a set of 2e+5 training tasks once, save the list of filenames as a pickle file and then load from this file when running experiments. This is significantly faster, taking less than a minute to load after the first time. 
 
@@ -48,7 +48,7 @@ A separate pickle file has to be generated for each type of task (5way1shot vs 5
 
 **Once saved, be careful to load the correct pickle file ie. way and shot used in the experiment must match the loaded file.** This is a potential source of a hidden bug, which will cause the model to fail to learn anything.
 
-The training set can be saved easily by calling the `data_generator.py` script and specifying the `--save` flag:
+The training set can be saved easily by calling the `data_generator.py` script and specifying the `--save`  and other task-specific flags:
 
 ```
 $ python data_generator.py --save --savepath='my_training_set.pkl' --datasource='cifar' --num_classes=5 --num_shot_train=1 --num_shot_test=1
@@ -56,4 +56,4 @@ $ python data_generator.py --save --savepath='my_training_set.pkl' --datasource=
 
 Subsequently, when calling the `make_data_tensor` method with an initialized `DataGenerator` object, just specify the arguments `load=True` and `savepath='my_training_set.pkl'`.
 
-This only works for the training set, since the validation and test sets are significantly faster to generate (<< 1 minute).
+This is only enabled for the training set, since the validation and test sets are significantly faster to generate (<< 1 minute).
