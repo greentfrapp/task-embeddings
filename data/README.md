@@ -58,3 +58,86 @@ $ python data_generator.py --save --savepath='my_training_set.pkl' --datasource=
 Subsequently, when calling the `make_data_tensor` method with an initialized `DataGenerator` object, just specify the arguments `load=True` and `savepath='my_training_set.pkl'`.
 
 This is only enabled for the training set, since the validation and test sets are significantly faster to generate (<< 1 minute).
+
+## Instructions for using `DataGenerator`
+
+The `DataGenerator` class is used to generate the sinusoid toy task, as well as the few-shot classification tasks from above.
+
+Generating the sinusoid toy task is straightforward, just initialize a `DataGenerator` object then generate samples and labels and pass these to any `tf.placeholder` variables using `sess.run`.
+
+Example:
+
+```
+data_generator = DataGenerator(
+	datasource=sinusoid,
+	num_classes=None,
+	num_samples_per_class=num_shot_train+num_shot_test,
+	batch_size=meta_batch_size,
+	test_set=None,
+)
+batch_x, batch_y, amp, phase = data_generator.generate()
+train_inputs = batch_x[:, :num_shot_train, :]
+train_labels = batch_y[:, :num_shot_train, :]
+test_inputs = batch_x[:, num_shot_train:, :]
+test_labels = batch_y[:, num_shot_train:, :]
+feed_dict = {
+	model.train_inputs: train_inputs,
+	model.train_labels: train_labels,
+	model.test_inputs: test_inputs,
+	model.test_labels: test_labels,
+	model.amp: amp, # use amplitude to scale loss
+}
+loss, _ = sess.run([model.loss, model.optimize], feed_dict)
+```
+
+Generating the classification tasks is different, since the classification tasks use a Tensorflow queue to efficiently pass data. 
+
+Again, we first initialize a `DataGenerator` object then generate samples and labels. But these generated samples and labels are Tensorflow tensors, which do not have any value until we run `tf.train.start_queue_runners()`. Instead, we pass these directly to any network layers, without the need for `tf.placeholder` objects.
+
+Example
+
+```
+data_generator = DataGenerator(
+	datasource=omniglot,
+	num_classes=num_classes,
+	num_samples_per_class=num_shot_train+num_shot_test,
+	batch_size=meta_batch_size,
+	test_set=False,
+)
+
+# assuming we saved the dataset in test.pkl and we want to load from it
+# otherwise, set load=False and savepath=None
+image_tensor, label_tensor = data_generator.make_data_tensor(train=True, load=True, savepath='test.pkl') 
+
+# here we slice the tensors into training and test
+train_inputs = tf.slice(image_tensor, [0, 0, 0], [-1, num_classes*num_shot_train, -1])
+test_inputs = tf.slice(image_tensor, [0, num_classes*num_shot_train, 0], [-1, -1, -1])
+train_labels = tf.slice(label_tensor, [0, 0, 0], [-1, num_classes*num_shot_train, -1])
+test_labels = tf.slice(label_tensor, [0, num_classes*num_shot_train, 0], [-1, -1, -1])
+
+input_tensors = {
+	'train_inputs': train_inputs, # Shape is (batch_size, num_classes * num_shot_train, 28 * 28)
+	'train_labels': train_labels, # Shape is (batch_size, num_classes * num_shot_train, num_classes)
+	'test_inputs': test_inputs, # Shape is (batch_size, num_classes * num_shot_test, 28 * 28
+	'test_labels': test_labels, # Shape is (batch_size, num_classes * num_shot_test, num_classes)
+}
+
+# initialize a model with the input tensors eg.
+
+conv_1 = tf.layers.conv2d(
+	inputs=tf.reshape(input_tensors['train_inputs'], [-1, 28, 28, 1]),
+	filters=64,
+	kernel_size=(3, 3),
+	strides=(1, 1),
+)
+
+# calculate loss with input tensors
+
+loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=tf.reshape(input_tensors['train_labels'], [-1, num_classes]), logits=self.logits))
+```
+
+I found it easier to initialize separate models for training and validation and then using `reuse=tf.AUTO_REUSE` to share parameters.
+
+Also note that for validation, set `test_set=False` when initializing the `DataGenerator` and pass `train=False` as an argument when calling `make_data_tensor`.
+
+For testing, set `test_set=False` when initializing the `DataGenerator` and pass `train=False` when calling `make_data_tensor`.
