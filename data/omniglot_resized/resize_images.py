@@ -1,6 +1,6 @@
 """
 Usage instructions:
-    First download the omniglot dataset 
+    First download the omniglot dataset from https://github.com/brendenlake/omniglot
     and put the contents of both images_background and images_evaluation in data/omniglot/ (without the root folder)
 
     Then, run the following:

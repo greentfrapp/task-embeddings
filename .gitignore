@@ -6,6 +6,7 @@ data/*/*
 !data/miniImagenet/*.py
 !data/miniImagenet/*.csv
 !data/omniglot_resized/*.py
+!data/*.md
 saved_models/
 *filenames*
 losses/
