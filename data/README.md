@@ -37,6 +37,7 @@ This transposes the 32 by 32 pixel images to be channel-last and places them in 
 I can't seem to find a good source for this dataset so the simplest way to do this is to just download the dataset from my Google Drive [here](https://drive.google.com/file/d/16pifyDIvxxI0ILEtw587-Kpx1HcaU9e3/view?usp=sharing).
 
 Then just extract the entire `miniImagenet` folder into the current folder (`data`).
+This is already resized and split into `test`, `val` and `train` folders.
 
 ## Additional Notes
 
