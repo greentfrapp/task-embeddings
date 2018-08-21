@@ -134,6 +134,11 @@ conv_1 = tf.layers.conv2d(
 # calculate loss with input tensors
 
 loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=tf.reshape(input_tensors['train_labels'], [-1, num_classes]), logits=self.logits))
+
+# start running the queue
+tf.train.start_queue_runners()
+
+loss, _ = sess.run([model.loss, model.optimize]) # no feed_dict is needed since data is passed using a Tensorflow queue
 ```
 
 I found it easier to initialize separate models for training and validation and then using `reuse=tf.AUTO_REUSE` to share parameters.
