@@ -68,8 +68,8 @@ class CNN_cifar(BaseModel):
 		self.name = name
 		self.num_classes = num_classes
 		# Attention parameters
-		self.attention_layers = 5
-		self.hidden = 64
+		self.attention_layers = 3
+		self.hidden = 512
 		with tf.variable_scope(self.name, reuse=tf.AUTO_REUSE):
 			self.build_model(input_tensors)
 			variables = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, self.name)
@@ -120,70 +120,77 @@ class CNN_cifar(BaseModel):
 		)
 
 		# Extract training features
-		train_feature_extractor = FeatureExtractor(self.train_inputs, is_training=self.is_training)
+		train_feature_extractor = FeatureExtractor(self.train_inputs, self.is_training)
 		train_labels = tf.reshape(self.train_labels, [batchsize, -1, self.num_classes])
 		train_features = tf.reshape(train_feature_extractor.output, [batchsize, -1, train_feature_extractor.output_dim])
-		train_features = tf.nn.l2_normalize(train_features, dim=-1)
+		# train_features = tf.nn.l2_normalize(train_features, dim=-1)
 		# train_features /= tf.norm(train_features, axis=-1, keep_dims=True)
-		self.train_features = train_features
+		# self.train_features = train_features
 		# Take mean of features for each class
-		output_weights = tf.matmul(train_labels, train_features, transpose_a=True) / tf.expand_dims(tf.reduce_sum(train_labels, axis=1), axis=-1)
+		# output_weights = tf.matmul(train_labels, train_features, transpose_a=True) / tf.expand_dims(tf.reduce_sum(train_labels, axis=1), axis=-1)
 		# weights_transformer = tf.get_variable(
 		# 	shape=(1, 2*2*512),
 		# 	name='weights_transformer'
 		# )
 		# output_weights = output_weights * weights_transformer
-		output_weights = tf.nn.l2_normalize(output_weights, dim=-1)
+		# output_weights = tf.nn.l2_normalize(output_weights, dim=-1)
 
 		# output_weights = tf.reshape(output_weights, [batchsize, -1, 2*2*64])
 
-		# Calculate class weights with attention
-		# with tf.variable_scope("attention"):
-		# 	train_embed = tf.layers.dense(
-		# 		inputs=output_weights,
-		# 		units=self.hidden,
-		# 		activation=None,
-		# 		name="train_embed",
-		# 	)
-		# 	for i in np.arange(self.attention_layers):
-		# 		train_embed, _ = self.attention(
-		# 			query=train_embed,
-		# 			key=train_embed,
-		# 			value=train_embed,
-		# 		)
-		# 		dense = tf.layers.dense(
-		# 			inputs=train_embed,
-		# 			units=self.hidden * 2,
-		# 			activation=tf.nn.relu,
-		# 			kernel_initializer=tf.contrib.layers.xavier_initializer(),
-		# 			name="attention_layer{}_dense0".format(i),
-		# 		)
-		# 		dense = tf.layers.dropout(
-		# 			inputs=dense,
-		# 			rate=0.2,
-		# 			training=self.is_training,
-		# 		)
-		# 		train_embed += tf.layers.dense(
-		# 			inputs=dense,
-		# 			units=self.hidden,
-		# 			activation=None,
-		# 			kernel_initializer=tf.contrib.layers.xavier_initializer(),
-		# 			name="attention_layer{}_dense1".format(i)
-		# 		)
-		# 		train_embed = tf.contrib.layers.layer_norm(train_embed, begin_norm_axis=2)
+		# train_features = tf.concat([train_features, tf.zeros_like(train_labels)], axis=-1)
+		# train_features = tf.reshape(train_features, [batchsize, -1, 2*2*64+self.num_classes])
+		train_features = tf.reshape(train_features, [batchsize, -1, 2*2*64])
 
-		# 	class_weights = tf.layers.dense(
-		# 		inputs=train_embed,
-		# 		units=2*2*64,
-		# 		activation=None,
-		# 		kernel_initializer=tf.contrib.layers.xavier_initializer(),
-		# 	)
+		# Calculate class weights with attention
+		with tf.variable_scope("attention"):
+			train_embed = tf.layers.dense(
+				inputs=train_features,
+				units=self.hidden,
+				activation=None,
+				name="train_embed",
+			)
+			for i in np.arange(self.attention_layers):
+				train_embed, _ = self.attention(
+					query=train_embed,
+					key=train_embed,
+					value=train_embed,
+				)
+				dense = tf.layers.dense(
+					inputs=train_embed,
+					units=self.hidden * 2,
+					activation=tf.nn.relu,
+					kernel_initializer=tf.contrib.layers.xavier_initializer(),
+					name="attention_layer{}_dense0".format(i),
+				)
+				dense = tf.layers.dropout(
+					inputs=dense,
+					rate=0.2,
+					training=self.is_training,
+				)
+				train_embed += tf.layers.dense(
+					inputs=dense,
+					units=self.hidden,
+					activation=None,
+					kernel_initializer=tf.contrib.layers.xavier_initializer(),
+					name="attention_layer{}_dense1".format(i)
+				)
+				train_embed = tf.contrib.layers.layer_norm(train_embed, begin_norm_axis=2)
+
+			class_weights = tf.layers.dense(
+				inputs=train_embed,
+				units=2*2*64,
+				activation=None,
+				kernel_initializer=tf.contrib.layers.xavier_initializer(),
+			)
+
+			class_weights = tf.matmul(train_labels, class_weights, transpose_a=True) / tf.expand_dims(tf.reduce_sum(train_labels, axis=1), axis=-1)
+
 
 		# Extract test features
-		test_feature_extractor = FeatureExtractor(self.test_inputs, is_training=self.is_training)
+		test_feature_extractor = FeatureExtractor(self.test_inputs, self.is_training)
 		test_features = tf.reshape(test_feature_extractor.output, [batchsize, -1, test_feature_extractor.output_dim])
 
-		# class_weights = tf.nn.l2_normalize(class_weights, dim=-1)
+		class_weights = tf.nn.l2_normalize(class_weights, dim=-1)
 		test_features = tf.nn.l2_normalize(test_features, dim=-1)
 		
 		# class_weights /= tf.norm(class_weights, axis=-1, keep_dims=True)
@@ -196,7 +203,7 @@ class CNN_cifar(BaseModel):
 			dtype=tf.float32,
 		)
 
-		logits = tf.matmul(test_features, output_weights, transpose_b=True)
+		logits = tf.matmul(test_features, class_weights, transpose_b=True)
 		logits = logits * self.scale
 		self.logits = logits = tf.reshape(logits, [-1, self.num_classes])
 
@@ -219,5 +226,5 @@ class CNN_cifar(BaseModel):
 		# regularization = tf.reduce_sum([tf.nn.l2_loss(var) for var in tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, self.name + '/attention')])
 		# self.loss = tf.losses.mean_squared_error(labels=self.test_labels, predictions=self.logits)
 		self.loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=self.test_labels, logits=self.logits))
-		self.optimize = tf.train.AdamOptimizer(learning_rate=1e-3).minimize(self.loss)
+		self.optimize = tf.train.AdamOptimizer(learning_rate=3e-4).minimize(self.loss)
 		self.test_accuracy = tf.contrib.metrics.accuracy(labels=tf.argmax(self.test_labels, axis=1), predictions=tf.argmax(self.logits, axis=1))

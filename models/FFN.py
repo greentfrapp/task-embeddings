@@ -13,9 +13,9 @@ class FeatureExtractor(object):
 	def __init__(self, inputs):
 		self.n_units = [40, 40]
 		with tf.variable_scope("extractor", reuse=tf.AUTO_REUSE):
-			self.build_model()
+			self.build_model(inputs)
 
-	def build_model(self):
+	def build_model(self, inputs):
 		running_output = inputs
 		for i, units in enumerate(self.n_units):
 			running_output = tf.layers.dense(
@@ -85,11 +85,11 @@ class FFN(BaseModel):
 			)
 			
 			for i in np.arange(self.attention_layers):
-				train_embed, _ = self.attention(
-					query=train_embed,
-					key=train_embed,
-					value=train_embed,
-				)
+				# train_embed, _ = self.attention(
+				# 	query=train_embed,
+				# 	key=train_embed,
+				# 	value=train_embed,
+				# )
 				dense = tf.layers.dense(
 					inputs=train_embed,
 					units=self.hidden * 2,
@@ -119,5 +119,6 @@ class FFN(BaseModel):
 		
 		amp = tf.reshape(self.amp, [-1, 1, 1])
 		self.loss = tf.losses.mean_squared_error(labels=tf.reshape(self.test_labels / amp, [-1]), predictions=tf.reshape(self.predictions / amp, [-1]))
+		self.plain_loss = tf.losses.mean_squared_error(labels=tf.reshape(self.test_labels, [-1]), predictions=tf.reshape(self.predictions, [-1]))
 		
 		self.optimize = tf.train.AdamOptimizer(learning_rate=3e-4).minimize(self.loss)
