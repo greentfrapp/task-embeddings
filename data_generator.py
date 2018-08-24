@@ -7,13 +7,9 @@ import os
 import random
 import tensorflow as tf
 import pickle
-from absl import flags
-from absl import app
 
 from utils import get_images
 
-
-FLAGS = flags.FLAGS
 
 ## Copied from Finn's implementation https://github.com/cbfinn/maml/blob/master/data_generator.py
 class DataGenerator(object):
@@ -36,8 +32,31 @@ class DataGenerator(object):
         if self.datasource == 'sinusoid':
             self.generate = self.generate_sinusoid_batch
             self.amp_range = config.get('amp_range', [0.1, 5.0])
+            # self.amp_range = config.get('amp_range', [5.0,10.0])
             self.phase_range = config.get('phase_range', [0, np.pi])
             self.input_range = config.get('input_range', [-5.0, 5.0])
+            self.dim_input = 1
+            self.dim_output = 1
+        elif self.datasource == 'heateqn':
+            self.generate = self.generate_heateqn_batch
+            self.heateqn_vars = {
+            }
+            self.dim_input = 1
+            self.dim_output = 1
+        elif self.datasource == 'multimodal':
+            self.generate = self.generate_multimodal_batch
+            self.amp_range = config.get('amp_range', [0.1, 5.0])
+            self.phase_range = config.get('phase_range', [0, np.pi])
+            self.input_range = config.get('input_range', [-5.0, 5.0])
+            self.slope_range = config.get('slope_range', [-3., 3.])
+            self.intercept_range = config.get('intercept_range', [-3., 3.])
+            self.dim_input = 1
+            self.dim_output = 1
+        elif self.datasource == 'step':
+            self.generate = self.generate_step_batch
+            self.period = 2
+            self.start_step_range = [-5., 4.]
+            self.input_range = [-5., 5.]
             self.dim_input = 1
             self.dim_output = 1
         elif self.datasource == 'omniglot':
@@ -110,7 +129,7 @@ class DataGenerator(object):
             raise ValueError('Unrecognized data source')
 
 
-    def make_data_tensor(self, train=True, save=False, load=False, savepath=None):
+    def make_data_tensor(self, train=True):
         if train:
             folders = self.metatrain_character_folders
             # number of tasks, not number of meta-iterations. (divide by metabatch size to measure)
@@ -120,25 +139,15 @@ class DataGenerator(object):
             num_total_batches = 600
 
         # make list of files
-        if self.datasource in ['omniglot', 'cifar', 'miniimagenet']:
-            if load:
-                assert train, 'Loading only allowed for training set'
-                assert savepath is not None, 'Savepath must be set'
-                with open(savepath, 'rb') as file:
-                    all_filenames = pickle.load(file)
-                labels = list(np.concatenate(np.array(self.num_samples_per_class * [list(range(self.num_classes))]).T, axis=0))
-                print('Loaded training set from {}'.format(savepath))
-            else:
-                print('Generating filenames')
-                if save:
-                    assert train, 'Saving only allowed for training set'
-                    assert savepath is not None, 'Savepath must be set'
+        print('Generating filenames')
+        if self.datasource == 'omniglot':
+            if not train:
                 all_filenames = []
                 from datetime import datetime
                 start = datetime.now()
                 for i in range(num_total_batches):
                     if (i + 1) % 5000 == 0:
-                        print('Generated {}/{} tasks...'.format((i + 1), num_total_batches))
+                        print('Generated {} tasks...'.format((i + 1)))
                     sampled_character_folders = random.sample(folders, self.num_classes)
                     random.shuffle(sampled_character_folders)
 
@@ -147,25 +156,102 @@ class DataGenerator(object):
                     labels = [li[0] for li in labels_and_images]
                     filenames = [li[1] for li in labels_and_images]
                     all_filenames.extend(filenames)
-                if save:
-                    with open(savepath, 'wb') as file:
-                        pickle.dump(all_filenames, file)
-                    print('\nTraining set saved to {}'.format(savepath))
-                    print('\nDetails:')
-                    print('--datasource={}'.format(FLAGS.datasource))
-                    print('--num_classes={}'.format(FLAGS.num_classes))
-                    print('--num_shot_train={}'.format(FLAGS.num_shot_train))
-                    print('--num_shot_test={}'.format(FLAGS.num_shot_test))
-                    print('--savepath={}'.format(FLAGS.savepath))
-                    quit()
+
+            # temp
+            # save and reload pickle for fast iteration
+            else:
+                with open("omniglot_filenames_5way1shot.pkl", 'rb') as file:
+                    # pickle.dump(all_filenames, file)
+                    all_filenames = pickle.load(file)
+                # quit()
+                labels = list(np.concatenate(np.array(self.num_samples_per_class * [list(range(self.num_classes))]).T, axis=0))
+        elif self.datasource == 'cifar':
+            if not train:
+                all_filenames = []
+                from datetime import datetime
+                start = datetime.now()
+                for i in range(num_total_batches):
+                    if (i + 1) % 5000 == 0:
+                        print('Generated {} tasks...'.format((i + 1)))
+                    sampled_character_folders = random.sample(folders, self.num_classes)
+                    random.shuffle(sampled_character_folders)
+
+                    # temp for pretraining
+                    # sampled_character_folders = folders
+
+                    labels_and_images = get_images(sampled_character_folders, range(self.num_classes), nb_samples=self.num_samples_per_class, shuffle=False)
+                    # make sure the above isn't randomized order
+                    labels = [li[0] for li in labels_and_images]
+                    filenames = [li[1] for li in labels_and_images]
+                    all_filenames.extend(filenames)
+
+            # temp
+            # save and reload pickle for fast iteration
+            else:
+                with open("cifar_filenames_5way1shot.pkl", 'rb') as file:
+                    # pickle.dump(all_filenames, file)
+                    all_filenames = pickle.load(file)
+                # quit()
+                labels = list(np.concatenate(np.array(self.num_samples_per_class * [list(range(self.num_classes))]).T, axis=0))
+        elif self.datasource == 'miniimagenet':
+            if not train:
+                all_filenames = []
+                from datetime import datetime
+                start = datetime.now()
+                for i in range(num_total_batches):
+                    if (i + 1) % 5000 == 0:
+                        print('Generated {} tasks...'.format((i + 1)))
+                    sampled_character_folders = random.sample(folders, self.num_classes)
+                    random.shuffle(sampled_character_folders)
+
+                    # temp for pretraining
+                    # sampled_character_folders = folders
+
+                    labels_and_images = get_images(sampled_character_folders, range(self.num_classes), nb_samples=self.num_samples_per_class, shuffle=False)
+                    # make sure the above isn't randomized order
+                    labels = [li[0] for li in labels_and_images]
+                    filenames = [li[1] for li in labels_and_images]
+                    all_filenames.extend(filenames)
+
+            # temp
+            # save and reload pickle for fast iteration
+            else:
+                with open("miniimagenet_filenames_25way1shot.pkl", 'rb') as file:
+                    # pickle.dump(all_filenames, file)
+                    all_filenames = pickle.load(file)
+                # quit()
+                labels = list(np.concatenate(np.array(self.num_samples_per_class * [list(range(self.num_classes))]).T, axis=0))
+        else:
+            all_filenames = []
+            from datetime import datetime
+            start = datetime.now()
+            for i in range(num_total_batches):
+                if (i + 1) % 5000 == 0:
+                    print('Generated {} tasks...'.format((i + 1)))
+                sampled_character_folders = random.sample(folders, self.num_classes)
+                random.shuffle(sampled_character_folders)
+
+                # temp
+                # sampled_character_folders = folders
+
+                labels_and_images = get_images(sampled_character_folders, range(self.num_classes), nb_samples=self.num_samples_per_class, shuffle=False)
+                # make sure the above isn't randomized order
+                labels = [li[0] for li in labels_and_images]
+                filenames = [li[1] for li in labels_and_images]
+                all_filenames.extend(filenames)
 
         # make queue for tensorflow to read from
         filename_queue = tf.train.string_input_producer(tf.convert_to_tensor(all_filenames), shuffle=False)
         print('Generating image processing ops')
         image_reader = tf.WholeFileReader()
         _, image_file = image_reader.read(filename_queue)
-        if self.datasource in ['miniimagenet', 'cifar']:
+        if self.datasource == 'miniimagenet':
             image = tf.image.decode_jpeg(image_file, channels=3)
+            image.set_shape((self.img_size[0],self.img_size[1],3))
+            image = tf.reshape(image, [self.dim_input])
+            image = tf.cast(image, tf.float32) / 255.0
+        elif self.datasource == 'cifar':
+            image = tf.image.decode_png(image_file, channels=3)
             image.set_shape((self.img_size[0],self.img_size[1],3))
             image = tf.reshape(image, [self.dim_input])
             image = tf.cast(image, tf.float32) / 255.0
@@ -200,6 +286,7 @@ class DataGenerator(object):
             for k in range(self.num_samples_per_class):
                 class_idxs = tf.range(0, self.num_classes)
                 class_idxs = tf.random_shuffle(class_idxs)
+
                 true_idxs = class_idxs*self.num_samples_per_class + k
                 new_list.append(tf.gather(image_batch,true_idxs))
                 if self.datasource == 'omniglot': # and FLAGS.train:
@@ -219,7 +306,7 @@ class DataGenerator(object):
 
     def generate_sinusoid_batch(self, train=True, input_idx=None):
         # Note train arg is not used (but it is used for omniglot method.
-        # input_idx is used during qualitative testing - the number of examples used for the grad update
+        # input_idx is used during qualitative testing --the number of examples used for the grad update
         amp = np.random.uniform(self.amp_range[0], self.amp_range[1], [self.batch_size])
         phase = np.random.uniform(self.phase_range[0], self.phase_range[1], [self.batch_size])
         outputs = np.zeros([self.batch_size, self.num_samples_per_class, self.dim_output])
@@ -231,32 +318,48 @@ class DataGenerator(object):
             outputs[func] = amp[func] * np.sin(init_inputs[func]-phase[func])
         return init_inputs, outputs, amp, phase
 
-def main(unused_args):
-    if FLAGS.save:
-        assert FLAGS.datasource in ['omniglot', 'cifar', 'miniimagenet'], '--datasource should be one of [\'omniglot\', \'cifar\', \'miniimagenet\']'
-        assert FLAGS.savepath is not None, 'Use --savepath to set where to save the training set'
-        
-        data_generator = DataGenerator(
-            datasource=FLAGS.datasource,
-            num_classes=FLAGS.num_classes,
-            num_samples_per_class=FLAGS.num_shot_train+FLAGS.num_shot_test,
-            batch_size=1,
-            test_set=False,
-        )
-        data_generator.make_data_tensor(train=True, save=True, savepath=FLAGS.savepath)
+    def generate_multimodal_batch(self, train=True, input_idx=None):
+        # Note train arg is not used (but it is used for omniglot method.
+        # input_idx is used during qualitative testing --the number of examples used for the grad update
+        modes = np.random.choice(2, self.batch_size)
 
-    else:
-        print('Run the script with the --save flag to save a training set')
+        amp = np.random.uniform(self.amp_range[0], self.amp_range[1], [self.batch_size])
+        phase = np.random.uniform(self.phase_range[0], self.phase_range[1], [self.batch_size])
+        slope = np.random.uniform(self.slope_range[0], self.slope_range[1], [self.batch_size])
+        intercept = np.random.uniform(self.intercept_range[0], self.intercept_range[1], [self.batch_size])
+        outputs = np.zeros([self.batch_size, self.num_samples_per_class, self.dim_output])
+        init_inputs = np.zeros([self.batch_size, self.num_samples_per_class, self.dim_input])
+        for func in range(self.batch_size):
+            init_inputs[func] = np.random.uniform(self.input_range[0], self.input_range[1], [self.num_samples_per_class, 1])
+            if input_idx is not None:
+                init_inputs[:,input_idx:,0] = np.linspace(self.input_range[0], self.input_range[1], num=self.num_samples_per_class-input_idx, retstep=False)
+            if modes[func] == 0:
+                outputs[func] = slope[func] * init_inputs[func] + intercept[func]
+            else:
+                outputs[func] = amp[func] * np.sin(init_inputs[func]-phase[func])
+        return init_inputs, outputs, amp, phase, slope, intercept, modes
+
+    def generate_step_batch(self, train=True, input_idx=None):
+        start_step = np.random.uniform(self.start_step_range[0], self.start_step_range[1], [self.batch_size])
+        outputs = np.zeros([self.batch_size, self.num_samples_per_class, self.dim_output])
+        init_inputs = np.zeros([self.batch_size, self.num_samples_per_class, self.dim_input])
+        for func in range(self.batch_size):
+            init_inputs[func] = np.random.uniform(self.input_range[0], self.input_range[1], [self.num_samples_per_class, 1])
+            if input_idx is not None:
+                init_inputs[:,input_idx:,0] = np.linspace(self.input_range[0], self.input_range[1], num=self.num_samples_per_class-input_idx, retstep=False)
+            outputs[func] = np.ones_like(init_inputs[func]) - (init_inputs[func] < start_step[func]).astype(np.float32) - (init_inputs[func] > (start_step[func] + self.period)).astype(np.float32)
+        return init_inputs, outputs, start_step
 
 if __name__ == '__main__':
-
-    # Defining options for saving the training set, since it can take up to 30 minutes to generate, especially for cifar and miniimagenet
-    
-    flags.DEFINE_bool('save', False, 'Save the training set')
-    flags.DEFINE_string('datasource', 'omniglot', 'Should be one of [\'omniglot\', \'cifar\', \'miniimagenet\']')
-    flags.DEFINE_integer('num_classes', 5, 'Number of classes/ways')
-    flags.DEFINE_integer('num_shot_train', 1, 'Number of training samples per class')
-    flags.DEFINE_integer('num_shot_test', 1, 'Number of test samples per class')
-    flags.DEFINE_string('savepath', None, 'Path to save training set to')
-
-    app.run(main)
+    data_generator = DataGenerator(
+        datasource='step',
+        num_classes=None,
+        num_samples_per_class=50,
+        batch_size=1,
+        test_set=None,
+    )
+    x, y, start_step = data_generator.generate_step_batch()
+    import matplotlib.pyplot as plt
+    fig, ax = plt.subplots()
+    ax.scatter(x, y)
+    plt.show()
