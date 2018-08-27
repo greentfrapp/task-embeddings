@@ -8,7 +8,7 @@ import random
 import tensorflow as tf
 import pickle
 
-from utils import get_images
+from utils import get_images, point_source
 
 
 ## Copied from Finn's implementation https://github.com/cbfinn/maml/blob/master/data_generator.py
@@ -39,7 +39,9 @@ class DataGenerator(object):
             self.dim_output = 1
         elif self.datasource == 'heateqn':
             self.generate = self.generate_heateqn_batch
+            self.input_range = [0., 5.]
             self.heateqn_vars = {
+                'point_range': [0., 5.],
             }
             self.dim_input = 1
             self.dim_output = 1
@@ -350,16 +352,30 @@ class DataGenerator(object):
             outputs[func] = np.ones_like(init_inputs[func]) - (init_inputs[func] < start_step[func]).astype(np.float32) - (init_inputs[func] > (start_step[func] + self.period)).astype(np.float32)
         return init_inputs, outputs, start_step
 
+    def generate_heateqn_batch(self, train=True, input_idx=None):
+        point = np.random.uniform(self.heateqn_vars['point_range'][0], self.heateqn_vars['point_range'][1], [self.batch_size])
+        outputs = np.zeros([self.batch_size, self.num_samples_per_class, self.dim_output])
+        init_inputs = np.zeros([self.batch_size, self.num_samples_per_class, self.dim_input])
+        for func in range(self.batch_size):
+            init_inputs[func] = np.random.uniform(self.input_range[0], self.input_range[1], [self.num_samples_per_class, 1])
+            if input_idx is not None:
+                init_inputs[:,input_idx:,0] = np.linspace(self.input_range[0], self.input_range[1], num=self.num_samples_per_class-input_idx, retstep=False)
+            full_x, full_y = point_source(self.heateqn_vars['point_range'][1], point[func], t=0.5)
+            outputs[func] = np.interp(init_inputs[func], full_x, full_y)
+        return init_inputs, outputs
+
+
 if __name__ == '__main__':
     data_generator = DataGenerator(
-        datasource='step',
+        datasource='heateqn',
         num_classes=None,
         num_samples_per_class=50,
         batch_size=1,
         test_set=None,
     )
-    x, y, start_step = data_generator.generate_step_batch()
     import matplotlib.pyplot as plt
     fig, ax = plt.subplots()
-    ax.scatter(x, y)
+    for i in range(5):
+        x, y = data_generator.generate()
+        ax.scatter(x, y)
     plt.show()
