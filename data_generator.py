@@ -309,7 +309,10 @@ class DataGenerator(object):
     def generate_sinusoid_batch(self, train=True, input_idx=None):
         # Note train arg is not used (but it is used for omniglot method.
         # input_idx is used during qualitative testing --the number of examples used for the grad update
-        amp = np.random.uniform(self.amp_range[0], self.amp_range[1], [self.batch_size])
+        # amp = np.random.uniform(self.amp_range[0], self.amp_range[1], [self.batch_size])
+        amp = np.random.uniform(10., 15., [self.batch_size])
+        # amp = np.concatenate([np.random.uniform(0.1, 1., [self.batch_size//2]), np.random.uniform(4., 5., [self.batch_size//2])])
+        # np.random.shuffle(amp)
         phase = np.random.uniform(self.phase_range[0], self.phase_range[1], [self.batch_size])
         outputs = np.zeros([self.batch_size, self.num_samples_per_class, self.dim_output])
         init_inputs = np.zeros([self.batch_size, self.num_samples_per_class, self.dim_input])
@@ -360,22 +363,40 @@ class DataGenerator(object):
             init_inputs[func] = np.random.uniform(self.input_range[0], self.input_range[1], [self.num_samples_per_class, 1])
             if input_idx is not None:
                 init_inputs[:,input_idx:,0] = np.linspace(self.input_range[0], self.input_range[1], num=self.num_samples_per_class-input_idx, retstep=False)
-            full_x, full_y = point_source(self.heateqn_vars['point_range'][1], point[func], t=0.5)
+            full_x, full_y = point_source(self.heateqn_vars['point_range'][1], point[func], t=0.01)
             outputs[func] = np.interp(init_inputs[func], full_x, full_y)
-        return init_inputs, outputs
+        return init_inputs, outputs, point
 
 
 if __name__ == '__main__':
+    # data_generator = DataGenerator(
+    #     datasource='heateqn',
+    #     num_classes=None,
+    #     num_samples_per_class=50,
+    #     batch_size=1,
+    #     test_set=None,
+    # )
+    # import matplotlib.pyplot as plt
+    # fig, ax = plt.subplots()
+    # for i in range(5):
+    #     x, y, point = data_generator.generate()
+    #     ax.scatter(x, y)
+    # plt.show()
     data_generator = DataGenerator(
-        datasource='heateqn',
+        datasource='sinusoid',
         num_classes=None,
-        num_samples_per_class=50,
+        num_samples_per_class=20,
         batch_size=1,
         test_set=None,
     )
-    import matplotlib.pyplot as plt
-    fig, ax = plt.subplots()
-    for i in range(5):
-        x, y = data_generator.generate()
-        ax.scatter(x, y)
-    plt.show()
+    data = {
+        'x': [],
+        'y': [],
+    }
+    for i in np.arange(500):
+        x, y, amp, phase = data_generator.generate()
+        data['x'].append(x)
+        data['y'].append(y)
+    with open('sinusoid_test_include_10_15.pkl', 'wb') as file:
+        pickle.dump(data, file)
+
